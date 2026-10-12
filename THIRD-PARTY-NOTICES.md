@@ -1,0 +1,2 @@
+# Third-party notices
+This application is distributed under GNU AGPL-3.0-or-later. Complete application source is provided with the release. MuPDF 1.28.1 is Copyright Artifex Software, Inc., licensed under AGPL-3.0-or-later. See LICENSE and node_modules/mupdf/LICENSE. MuPDF source: https://github.com/ArtifexSoftware/mupdf and https://github.com/ArtifexSoftware/mupdf.js . Electron is MIT licensed and ships Chromium and other dependencies; the packaged runtime includes LICENSE and LICENSES.chromium.html. No user documents are included in the application or source release.
