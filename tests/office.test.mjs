@@ -11,6 +11,9 @@ test('real DOCX, XLSX and PPTX conversion generates readable PDFs',{skip:!fixtur
  for(const ext of ['docx','xlsx','pptx']){
   const jobs=new JobService(),{jobId}=await jobs.submit({operation:'office_to_pdf',inputs:[path.join(fixtures,'sample.'+ext)],outputDir:out});
   const result=await new Promise(resolve=>jobs.on('update',j=>{if(j.id===jobId&&j.status!=='running')resolve(j);}));assert.equal(result.status,'completed',JSON.stringify(result));
-  const doc=mupdf.Document.openDocument(await fs.readFile(result.results[0].outputs[0]),'application/pdf');assert(doc.countPages()>0);let text='';for(let i=0;i<doc.countPages();i++){const p=doc.loadPage(i),s=p.toStructuredText();text+=s.asText();s.destroy();p.destroy();}assert.match(text,/Qingye/);doc.destroy();
+  const doc=mupdf.Document.openDocument(await fs.readFile(result.results[0].outputs[0]),'application/pdf');assert(doc.countPages()>0);let text='';const glyphs=new Set();let chinese=0;
+  const device=new mupdf.Device({fillText(t){t.walk({showGlyph(font,trm,glyph,unicode){if(unicode>=0x4e00&&unicode<=0x9fff){chinese++;glyphs.add(font.getName()+':'+glyph);}}});}});
+  for(let i=0;i<doc.countPages();i++){const p=doc.loadPage(i),s=p.toStructuredText();text+=s.asText();p.run(device,mupdf.Matrix.identity);s.destroy();p.destroy();}
+  device.close();device.destroy();assert.match(text,/Qingye/);assert.match(text,/中文转换测试/);assert(chinese>=6);assert(glyphs.size>=6,'Chinese must render as distinct glyphs, not one repeated missing-glyph box');doc.destroy();
  }
 });

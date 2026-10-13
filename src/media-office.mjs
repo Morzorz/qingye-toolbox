@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findEngine, runProcess } from './components.mjs';
 export async function convertExternal({operation,inputs,options,temp},signal,progress) {
   const kind=operation==='office_to_pdf'?'office':'media';const binary=await findEngine(kind);
@@ -8,6 +8,10 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
   const base=path.basename(inputs[0],path.extname(inputs[0]));
   if(kind==='office') {
     const profile=path.join(temp,'office-profile');await fs.mkdir(path.join(profile,'user'),{recursive:true});
+    // Headless Office can miss OS fonts. Register our CJK fallback in this
+    // task's private profile; do not install fonts globally or edit documents.
+    const fonts=path.join(profile,'user','fonts');await fs.mkdir(fonts,{recursive:true});
+    await fs.writeFile(path.join(fonts,'NotoSansSC-Regular.otf'),await fs.readFile(fileURLToPath(new URL('../assets/fonts/NotoSansSC-Regular.otf',import.meta.url))));
     await fs.writeFile(path.join(profile,'user','registrymodifications.xcu'),'<?xml version="1.0" encoding="UTF-8"?><oor:items xmlns:oor="http://openoffice.org/2001/registry"><item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>');
     progress({percent:10,stage:'正在转换办公文档…'});
     await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--nologo','--nodefault','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:10*60*1000});

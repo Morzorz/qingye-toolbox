@@ -14,3 +14,5 @@ Optional components are downloaded only on user request, not bundled in the inst
 - LibreOffice 26.8.1: https://www.libreoffice.org/ and https://www.libreoffice.org/about-us/licenses/ . Official installers retain their original notices. Source: https://download.documentfoundation.org/libreoffice/src/ .
 
 Bundled dependency license files and Electron's Chromium notices remain in the application distribution. No optional component or user document is included in the application source archive.
+
+Noto Sans SC Regular (Noto CJK Sans 2.004) is bundled as a fallback font for Office conversion under SIL Open Font License 1.1. The unmodified font and full license are in assets/fonts/. Source: https://github.com/notofonts/noto-cjk/tree/Sans2.004/Sans/SubsetOTF/SC . The font is copied into each temporary LibreOffice user profile and embedded/subset by LibreOffice in output PDFs. It is not installed system-wide.

@@ -1,6 +1,6 @@
 {
   "name": "qingye-pdf",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "轻页文件工具箱 · 本地转换与 AI 调用",
   "author": "Qingye contributors",
   "license": "AGPL-3.0-or-later",
@@ -40,7 +40,8 @@
       "THIRD-PARTY-NOTICES.md",
       "package.json",
       "assets/icon.ico",
-      "assets/icon.icns"
+      "assets/icon.icns",
+      "assets/fonts/**/*"
     ],
     "asarUnpack": [
       "node_modules/mupdf/dist/*.wasm",
@@ -63,7 +64,8 @@
         "assets/icon.ico",
         "assets/icon.icns",
         "!node_modules/@img/sharp-win32-x64/**/*",
-        "!node_modules/@img/sharp-wasm32/**/*"
+        "!node_modules/@img/sharp-wasm32/**/*",
+        "assets/fonts/**/*"
       ]
     },
     "win": {
@@ -83,7 +85,8 @@
         "assets/icon.icns",
         "!node_modules/@img/sharp-darwin-arm64/**/*",
         "!node_modules/@img/sharp-libvips-darwin-arm64/**/*",
-        "!node_modules/@img/sharp-wasm32/**/*"
+        "!node_modules/@img/sharp-wasm32/**/*",
+        "assets/fonts/**/*"
       ]
     },
     "nsis": {

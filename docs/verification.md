@@ -1,3 +1,17 @@
+# Verification record — 1.1.1, 2026-10-13
+
+- Reproduced Chinese text rendering as blank/missing glyphs while extracted PDF text remained valid. Both available headless Office paths reproduced it on synthetic DOCX with 宋体、微软雅黑、仿宋、黑体 and an unavailable font.
+- Previous 1.1.0 Office tests checked English text only. They did not establish Chinese visual correctness; the new regression covers this gap.
+- Added unmodified Noto Sans SC Regular 2.004 under SIL OFL 1.1. Copied into each temporary LibreOffice user/fonts directory; no system font installation or modification of original documents.
+- Font SHA-256: faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9. Source tag Sans2.004 in notofonts/noto-cjk, Sans/SubsetOTF/SC/NotoSansSC-Regular.otf. License supplied in assets/fonts/OFL.txt.
+- npm test with Chinese Office fixtures: all 13 passed, no skips. Office tests require correct Chinese text and at least six distinct rendered Chinese glyphs, catching the old repeated missing-glyph behavior.
+- Final packaged Mac application converted Chinese DOCX, XLSX and PPTX through the actual GUI. Rendered all three outputs at 1.5 scale and visually checked: Chinese visible, no boxes, sample cells not clipped. Word tested five requested font names including a deliberately missing font.
+- Packaged font and license byte parity checked for both Mac and Windows; source parity and platform engine checks passed. Mac ad-hoc signature and DMG checksum verified.
+- Windows package cross-built; Windows native conversion has not been tested. User's original document was not provided, so validation used synthetic reproductions of the screenshot's symptoms.
+- Font fallback can change typography/line wrapping if the original font is unavailable. Upgrade and reconvert the original Office file; previously generated broken PDFs are not automatically repaired.
+
+---
+
 # Verification record — 1.1.0, 2026-10-13
 
 - Retained Electron desktop architecture; no Tauri migration files included in application or source archive.
