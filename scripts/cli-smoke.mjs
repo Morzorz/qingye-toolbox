@@ -1,0 +1,12 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {fixture} from '../tests/fixtures.mjs';
+const root=await fs.mkdtemp(path.join(os.tmpdir(),'qingye-cli-')),data=path.join(root,'data');await fs.mkdir(data);
+const input=path.join(root,'input.pdf');await fs.writeFile(input,fixture());await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({roots:[root],engines:{}}));
+const command=process.env.QINGYE_PACKAGED_APP;if(!command)throw Error('Set QINGYE_PACKAGED_APP');
+const child=spawn(command,['--cli',JSON.stringify({operation:'pdf_compress',inputs:[input],outputDir:root})],{env:{...process.env,QINGYE_DATA_DIR:data},stdio:['ignore','pipe','pipe']});
+let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
+assert.equal(code,0,err);const result=JSON.parse(out);assert.equal(result.status,'completed');assert((await fs.stat(result.results[0].outputs[0])).size>0);console.log('PASS packaged command-line conversion and JSON result');

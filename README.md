@@ -1,35 +1,59 @@
-# 轻页 PDF 压缩
+# 轻页文件工具箱 1.1.0
 
-离线中文桌面工具，支持拖入/选择多个 PDF、三档压缩、进度、取消、选择保存文件夹、重名文件自动编号和打开结果所在位置。无需另装压缩组件，文件不上传网络。原文件始终保留。
+保留 Electron 桌面方案，文件在本机处理，原文件不覆盖。提供 Windows x64 EXE 和苹果芯片 Mac DMG。
 
-## 安装与使用
+## 功能
 
-- Windows x64：运行 `Qingye-PDF-1.0.0-win-x64-setup.exe`，可自行选择安装目录。
-- 苹果芯片 Mac：打开 `Qingye-PDF-1.0.0-mac-arm64.dmg`，将应用拖入 Applications。此包不适用于 Intel Mac。
-- Mac 已做本地 ad-hoc 签名，但没有 Apple 开发者签名/公证；Windows 没有商业代码签名。系统可能提示来源无法验证。Mac 可在系统设置 → 隐私与安全性中允许打开自己确认来源的应用，无需关闭系统整体安全检查。
-- 打开应用，拖入 PDF，选择压缩档位和保存位置，点击“开始压缩”。结果以 `_压缩版.pdf` 保存，重名自动增加编号。
+| 分类 | 支持操作 |
+|---|---|
+| PDF | 三档压缩、按顺序合并、提取页码、转 PNG/JPG |
+| 图片 | JPG/PNG/WebP 互转、缩放、多图转 PDF |
+| 办公文档 | Word/Excel/PPT 转 PDF，需 LibreOffice |
+| 音频 | 转 MP3/WAV/FLAC/M4A、从视频提取音频，需 FFmpeg |
+| 视频 | 转 MP4、压缩、调整分辨率，需 FFmpeg |
+| AI 调用 | 本地 stdio MCP、命令行 JSON 任务 |
 
-## 压缩档位
+每批最多 100 个输入，支持进度、取消、结果定位和重名自动编号。合并按列表顺序，可上下调整。默认保存到第一个输入文件所在目录，也可另选目录。PDF 拆分目前是指定页码提取为一个 PDF（例如 `1-3,5`）。不支持 PDF 还原为可编辑 Office，也不包含 OCR。
 
-| 档位 | 图片最长边上限 | JPEG 质量 | 用途 |
-|---|---:|---:|---|
-| 清晰优先 | 3600 像素 | 88 | 保留更多细节 |
-| 均衡 | 2600 像素 | 78 | 日常合同和扫描件 |
-| 最小体积 | 1600 像素 | 62 | 快速传阅，细字可能变模糊 |
+## 安装与组件
 
-保留 PDF 文字层、页面尺寸、书签、批注和表单结构；压缩主要针对普通彩色/灰度扫描图片。复杂透明图像、蒙版及部分特殊色彩图片保持原样。纯文字或已经优化过的 PDF 可能缩小有限；若新文件更大，导出原文件的完整副本并显示“已是较小体积”。不支持密码加密 PDF 或含数字签名的 PDF。扫描件上的红色印章作为图片处理，可以压缩。单个文件最大 500 MiB。
+Mac：将 DMG 中的应用拖到 Applications 后运行，仅适用于 Apple Silicon。Windows：运行 EXE，按向导安装。Mac 使用本地 ad-hoc 签名，尚未经过 Apple 公证；Windows 未配置商业代码签名。系统可能提示未知来源，请确认来源后使用系统提供的允许打开入口。
 
-## 本次验证
+PDF 和图片功能内置。打开「组件与 AI」可下载或选择已有组件：
 
-- 5 项引擎测试通过：扫描压缩及文字/表单/书签/页面保留、不增大回退、错误输入、加密及数字签名拒绝、三档输出。
-- 实际 Electron 窗口和打包 Mac 应用测试通过：混合成功/失败批次、重名另存、原文件保留、拖放添加、自定义保存目录、取消任务。
-- 实际 7 页扫描合同：原 74,048,354 字节；清晰 8,580,985；均衡 2,940,407；最小 801,228。已检查均衡档文字和印章页面。
-- Windows x64 安装包已在 Mac 交叉构建；未在 Windows 上实际运行。附带 GitHub Actions Windows 构建与启动测试流程，尚未远程执行。
-- 私人合同不包含在源码、截图、安装包或自动测试数据中。
+- 音视频组件：FFmpeg 第三方预编译版本，下载约 44–79 MiB。
+- 办公组件：LibreOffice 官方安装包，下载约 285–358 MB；Windows 需完成弹出的安装向导后刷新状态。
 
-## 开发与构建
+组件安装后可离线处理。下载使用 HTTPS 和固定 SHA-256 校验，取消或失败不会将未验证的组件标记为已安装。网络仅用于用户主动下载组件；文件内容不上传。本版没有接入广告网络、账号、遥测或自动更新。
 
-需要 Node.js 22+。使用 lockfile 固定依赖。正常联网环境执行：
+## 让 AI 调用
+
+1. 安装后打开「组件与 AI」，添加允许 AI 读写的文件夹。
+2. 点击「复制通用 MCP 配置」或「复制 Codex 配置」。配置使用当前已安装应用的可执行文件，不需要额外安装 Node。
+3. 将配置添加到支持本地 stdio MCP 的 AI 客户端，重新加载连接。
+4. 告诉 AI 输入文件、输出文件夹和处理方式；输入及输出都必须在授权目录内。
+
+可用工具：`capabilities` 查看能力和组件，`submit_task` 提交任务，`task_status` 查询进度及结果，`cancel_task` 取消任务。提交返回任务 ID，必须查询最终结果后才能判断成功。撤销授权后，新任务和待导出结果会重新检查权限。文件内容及文件名均视为数据，不作为指令。
+
+普通网页聊天不会自动发现本地应用。AI 客户端仍可能要求用户确认工具调用；本应用不修改客户端配置。参考 [Codex MCP 文档](https://developers.openai.com/codex/mcp)。
+
+命令行接口：应用可执行文件后追加 `--cli` 和一个 JSON 参数。JSON 结构示例：
+
+```json
+{"operation":"pdf_compress","inputs":["/absolute/path/input.pdf"],"outputDir":"/absolute/path/output","options":{"preset":"balanced"}}
+```
+
+命令行使用相同授权目录，输出最终任务 JSON。Windows 路径需按 JSON 规则转义反斜杠。`--mcp` 启动无窗口的协议服务。
+
+## 已知边界
+
+压缩 PDF 主要优化扫描图片，保留文字层、表单、书签等结构；纯文字或已优化文件缩小有限，输出更大时保留原字节。三档为清晰、均衡、最小体积；最小档可能损失小字细节。不处理加密或带数字签名的 PDF。合并和页码提取保留页面内容，不承诺保留文档级目录、表单关系和附件。图片转换不支持动画。Office 排版受已安装字体及 LibreOffice 兼容性影响。
+
+PDF、图片和办公文件单个上限 500 MiB，合并总输入上限 500 MiB；音视频单个上限 20 GiB。PDF 转图最多 500 页，页码提取最多 5000 页。每个应用或 MCP 进程同时执行一个任务。
+
+## 开发与验证
+
+需要 Node.js 22+：
 
 ```sh
 npm ci
@@ -40,10 +64,12 @@ npm run build:mac
 npm run build:win
 ```
 
-Mac 原生构建需要 macOS；Windows 包可通过 electron-builder 的 NSIS 跨平台构建。推荐在目标系统运行 UI 测试。测试额外扫描件时可设置 `QINGYE_SAMPLE` 环境变量为本地 PDF 路径。`QINGYE_APP` 可指定打包后可执行文件路径。
+音视频测试自动使用本机 FFmpeg；办公测试需 `scripts/create-office-fixtures.py` 生成合成样本，并将 `QINGYE_OFFICE_FIXTURES` 指向样本目录。该脚本需要 python-docx、openpyxl 和 python-pptx。`QINGYE_APP` 指定打包应用的可执行文件以运行界面测试；`QINGYE_PACKAGED_APP` 指定打包应用以运行 MCP 测试。无真实用户文档打包或入库。
 
-主进程在 `src/main.cjs`；独立引擎在 `src/compress.mjs`；后台任务在 `src/worker.mjs`；界面与隔离桥接在 `src/renderer.js` 和 `src/preload.cjs`。
+入口 `src/entry.cjs`，桌面 `src/desktop.cjs`，共享任务 `src/jobs.mjs`，转换引擎 `src/operations-worker.mjs` 与 `src/media-office.mjs`，AI 接口 `src/mcp.mjs`。旧 1.0 界面文件保留用于参考，发布入口使用新版工具箱。
+
+Windows 安装包在 Mac 交叉构建；本机不能验证 Windows 实际启动。仓库提供 Windows GitHub Actions 测试流程，但未声称已远程执行。
 
 ## 许可
 
-本项目采用 AGPL-3.0-or-later，包含 MuPDF 引擎；交付包含源码。再分发或修改时请保留许可并遵守相应源码提供要求。详见 LICENSE、THIRD-PARTY-NOTICES.md。项目没有账号、遥测或自动更新网络服务。
+项目使用 AGPL-3.0-or-later 并附源码，包含 MuPDF；其他组件见 THIRD-PARTY-NOTICES.md。可选组件分别遵循其原许可。

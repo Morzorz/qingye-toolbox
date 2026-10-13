@@ -7,3 +7,8 @@ Specification reviewed and approved. The referenced writing-plans skill is not i
 3. Build Chinese accessible UI, guarded preload IPC, serial queue, progress/cancel, output folder selection, collision-free exports and reveal.
 4. Test synthetic fixtures plus real user sample outside source tree. Run automated Electron interaction and packaged Mac smoke tests.
 5. Package ARM64 DMG and x64 EXE using reproducible scripts, inspect both outputs and record Windows runtime limitations. Deliver source archive and instructions.
+
+
+## Toolbox and local AI extension (1.1.0)
+
+Completed: shared operation catalog and job service; worker PDF/image operations; FFmpeg/LibreOffice subprocess operations; optional verified/staged component downloads; Chinese toolbox UI; folder-scoped MCP and CLI; synthetic regression and real packaged app verification. Design: docs/superpowers/specs/2026-10-12-toolbox-ai-design.md. Results and remaining platform limits: docs/verification.md.

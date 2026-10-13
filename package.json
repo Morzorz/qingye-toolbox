@@ -1,29 +1,34 @@
 {
   "name": "qingye-pdf",
-  "version": "1.0.0",
-  "description": "轻页 PDF 压缩 · 离线批量压缩工具",
+  "version": "1.1.0",
+  "description": "轻页文件工具箱 · 本地转换与 AI 调用",
   "author": "Qingye contributors",
   "license": "AGPL-3.0-or-later",
-  "main": "src/main.cjs",
+  "main": "src/entry.cjs",
   "type": "module",
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.mjs",
     "build:mac": "electron-builder --mac dmg --arm64 --publish never",
     "build:win": "electron-builder --win nsis --x64 --publish never",
-    "test:ui": "node scripts/smoke.mjs"
+    "test:ui": "node scripts/toolbox-smoke.mjs",
+    "mcp": "node scripts/mcp-server.mjs"
   },
   "dependencies": {
-    "mupdf": "1.28.1"
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "mupdf": "1.28.1",
+    "sharp": "0.35.5",
+    "zod": "4.6.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "electron": "^41.0.0",
     "electron-builder": "^26.0.12",
-    "@playwright/test": "^1.58.0"
+    "esbuild": "^0.28.2"
   },
   "build": {
     "appId": "local.qingye.pdfcompressor",
-    "productName": "轻页 PDF 压缩",
+    "productName": "轻页文件工具箱",
     "directories": {
       "output": "release",
       "buildResources": "assets"
@@ -38,7 +43,8 @@
       "assets/icon.icns"
     ],
     "asarUnpack": [
-      "node_modules/mupdf/dist/*.wasm"
+      "node_modules/mupdf/dist/*.wasm",
+      "node_modules/@img/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -46,16 +52,39 @@
         "dmg"
       ],
       "identity": "-",
-      "artifactName": "Qingye-PDF-${version}-mac-arm64.${ext}",
-      "icon": "assets/icon.icns"
+      "artifactName": "Qingye-Toolbox-${version}-mac-arm64.${ext}",
+      "icon": "assets/icon.icns",
+      "files": [
+        "src/**/*",
+        "assets/icon.png",
+        "LICENSE",
+        "THIRD-PARTY-NOTICES.md",
+        "package.json",
+        "assets/icon.ico",
+        "assets/icon.icns",
+        "!node_modules/@img/sharp-win32-x64/**/*",
+        "!node_modules/@img/sharp-wasm32/**/*"
+      ]
     },
     "win": {
       "target": [
         "nsis"
       ],
       "signAndEditExecutable": false,
-      "artifactName": "Qingye-PDF-${version}-win-x64-setup.${ext}",
-      "icon": "assets/icon.ico"
+      "artifactName": "Qingye-Toolbox-${version}-win-x64-setup.${ext}",
+      "icon": "assets/icon.ico",
+      "files": [
+        "src/**/*",
+        "assets/icon.png",
+        "LICENSE",
+        "THIRD-PARTY-NOTICES.md",
+        "package.json",
+        "assets/icon.ico",
+        "assets/icon.icns",
+        "!node_modules/@img/sharp-darwin-arm64/**/*",
+        "!node_modules/@img/sharp-libvips-darwin-arm64/**/*",
+        "!node_modules/@img/sharp-wasm32/**/*"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -65,7 +94,7 @@
       "deleteAppDataOnUninstall": false
     },
     "dmg": {
-      "title": "轻页 PDF 压缩"
+      "title": "轻页文件工具箱"
     }
   }
 }
