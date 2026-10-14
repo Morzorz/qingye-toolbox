@@ -20,7 +20,14 @@ case "${1:-}" in
   export QINGYE_SOFFICE="$TRIM_APPDEST/runtime/bin/soffice"
   export HOME="${TRIM_PKGHOME:-$TRIM_PKGVAR}"
   export TMPDIR="${TRIM_PKGTMP:-$TRIM_PKGVAR}"
-  mkdir -p "$HOME" "$TMPDIR"
+  export XDG_CONFIG_HOME="$HOME/.config"
+  export XDG_CACHE_HOME="$HOME/.cache"
+  export XDG_DATA_HOME="$HOME/.local/share"
+  export XDG_RUNTIME_DIR="$TMPDIR/xdg-runtime"
+  export SAL_USE_VCLPLUGIN=svp
+  export OOO_DISABLE_RECOVERY=1
+  mkdir -p "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$XDG_RUNTIME_DIR"
+  chmod 700 "$XDG_RUNTIME_DIR"
   if [ -f "$TRIM_PKGVAR/app.log" ]; then mv -f "$TRIM_PKGVAR/app.log" "$TRIM_PKGVAR/app.previous.log"; fi
   cd "$TRIM_APPDEST"
   nohup "$TRIM_APPDEST/runtime/bin/node" "$TRIM_APPDEST/fnos/server.mjs" > "$TRIM_PKGVAR/app.log" 2>&1 < /dev/null &

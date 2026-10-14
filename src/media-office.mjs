@@ -21,8 +21,12 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
     },5000);
     const output=path.join(temp,base+'.pdf');
     const validPdf=async()=>{const file=await fs.open(output,'r').catch(()=>null);if(!file)return false;try{const b=Buffer.alloc(5);await file.read(b,0,5,0);return b.toString()==='%PDF-';}finally{await file.close();}};
+    let diagnostics='';
+    console.log('Qingye office conversion started:',JSON.stringify({input:inputs[0],output,engine:binary}));
     try{
-      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000,successWhen:validPdf});
+      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000,successWhen:validPdf,onStdout:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);},onStderr:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);}});
+      console.log('Qingye office conversion completed:',JSON.stringify({input:inputs[0],output}));
+    }catch(error){console.error('Qingye office conversion failed:',JSON.stringify({input:inputs[0],output,error:error.message,diagnostics}));throw error;
     }finally{clearInterval(heartbeat);}
     const head=await fs.open(output,'r').catch(()=>null);
     if(!head)throw new Error('办公组件未生成 PDF；请确认文件未加密且可正常打开');
