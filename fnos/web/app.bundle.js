@@ -114,15 +114,48 @@ try {
         load(null);
       });
     }
+    function uploadOne(file, operation) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest(), url = base + "/api/upload?operation=" + encodeURIComponent(operation) + "&name=" + encodeURIComponent(file.name);
+        xhr.open("POST", url, true);
+        xhr.responseType = "text";
+        xhr.timeout = 10 * 60 * 1e3;
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.setRequestHeader("X-Qingye-Request", "1");
+        xhr.upload.onprogress = (e) => {
+          const percent = e.lengthComputable ? Math.floor(e.loaded / e.total * 100) : null;
+          document.getElementById("message").textContent = percent === null ? "正在上传 " + file.name + "…" : "正在上传 " + file.name + "… " + percent + "%";
+        };
+        xhr.onload = () => {
+          let data;
+          try {
+            data = JSON.parse(xhr.responseText);
+          } catch {
+            reject(Error("上传返回内容无效，请重试"));
+            return;
+          }
+          if (xhr.status < 200 || xhr.status >= 300) {
+            reject(Error(data.error || "上传失败 (" + xhr.status + ")"));
+            return;
+          }
+          resolve(data);
+        };
+        xhr.onerror = () => reject(Error("上传连接中断，请检查飞牛应用是否正在运行后重试"));
+        xhr.ontimeout = () => reject(Error("上传等待超过 10 分钟，已停止。请检查 NAS 存储空间和应用日志后重试"));
+        xhr.onabort = () => reject(Error("上传已取消"));
+        xhr.send(file);
+      });
+    }
     async function upload(files2, operation) {
       if (files2.length > 100) throw Error("每批最多上传 100 个文件");
       const added2 = [], errors = [];
       for (const file of files2) {
-        document.getElementById("message").textContent = "正在上传 " + file.name + "…";
-        const r = await fetch(base + "/api/upload?operation=" + encodeURIComponent(operation) + "&name=" + encodeURIComponent(file.name), { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Qingye-Request": "1" }, body: file });
-        const data = await r.json();
-        if (!r.ok) errors.push(file.name + "：" + data.error);
-        else added2.push(...data.added);
+        try {
+          const data = await uploadOne(file, operation);
+          added2.push(...data.added);
+        } catch (e) {
+          errors.push(file.name + "：" + e.message);
+        }
       }
       return { added: added2, errors };
     }

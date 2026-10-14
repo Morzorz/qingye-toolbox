@@ -46,7 +46,7 @@ export async function createApplication({roots,share,stateDir}){
     const policy=basePolicy.replace("script-src 'self'",`script-src 'self' 'sha256-${hash}'`);
     html=html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,'')
      .replace('<script type="module" src="toolbox-ui.mjs"></script>',()=>'<script>'+script+'</script>')
-     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.1"`)
+     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.3"`)
      .replace('<div id="message" role="status" aria-live="polite"></div>','<div id="message" role="status" aria-live="polite">界面正在加载；如菜单不能切换，请刷新页面。</div>');
     res.setHeader('Content-Security-Policy',policy);
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);return;
