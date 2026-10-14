@@ -1,0 +1,46 @@
+#!/bin/bash
+set -eu
+: "${TRIM_APPDEST:?}" "${TRIM_PKGVAR:?}"
+PIDFILE="$TRIM_PKGVAR/qingye.pid"
+fail() { if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$1" > "$TRIM_TEMP_LOGFILE"; fi; printf '%s\n' "$1" >&2; exit 1; }
+alive() {
+ [ -f "$PIDFILE" ] || return 1
+ pid=$(cat "$PIDFILE")
+ case "$pid" in ''|*[!0-9]*) return 1;; esac
+ [ -r "/proc/$pid/cmdline" ] || return 1
+ tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fqx "$TRIM_APPDEST/fnos/server.mjs"
+}
+case "${1:-}" in
+ start)
+  if alive; then exit 0; fi
+  mkdir -p "$TRIM_PKGVAR"
+  [ -n "${TRIM_DATA_SHARE_PATHS:-}" ] || fail '未创建共享目录，请检查应用安装状态'
+  export QINGYE_DATA_DIR="$TRIM_PKGVAR"
+  export QINGYE_FFMPEG="$TRIM_APPDEST/runtime/bin/ffmpeg"
+  export QINGYE_SOFFICE="$TRIM_APPDEST/runtime/bin/soffice"
+  export HOME="${TRIM_PKGHOME:-$TRIM_PKGVAR}"
+  export TMPDIR="${TRIM_PKGTMP:-$TRIM_PKGVAR}"
+  mkdir -p "$HOME" "$TMPDIR"
+  if [ -f "$TRIM_PKGVAR/app.log" ]; then mv -f "$TRIM_PKGVAR/app.log" "$TRIM_PKGVAR/app.previous.log"; fi
+  cd "$TRIM_APPDEST"
+  nohup "$TRIM_APPDEST/runtime/bin/node" "$TRIM_APPDEST/fnos/server.mjs" > "$TRIM_PKGVAR/app.log" 2>&1 < /dev/null &
+  printf '%s\n' "$!" > "$PIDFILE"
+  for n in $(seq 1 30); do
+   if ! alive; then fail '轻页启动失败，请查看应用日志'; fi
+   if [ -S "$TRIM_APPDEST/app.sock" ]; then exit 0; fi
+   sleep 1
+  done
+  kill -TERM "$(cat "$PIDFILE")" || true
+  fail '轻页启动超时'
+  ;;
+ stop)
+  if alive; then
+   kill -TERM "$pid"
+   for n in $(seq 1 40); do if ! alive; then break; fi; sleep 1; done
+   if alive; then fail '任务仍在清理，请稍后再次停止'; fi
+  fi
+  rm -f "$PIDFILE"
+  ;;
+ status) if alive; then exit 0; else exit 3; fi ;;
+ *) exit 1;;
+esac

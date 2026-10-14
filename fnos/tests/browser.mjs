@@ -1,0 +1,14 @@
+import {chromium} from '@playwright/test';
+import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import http from 'node:http';import assert from 'node:assert/strict';
+import {createApplication,PREFIX} from '../server.mjs';import {fixture} from '../../tests/fixtures.mjs';
+const root=await fs.mkdtemp(path.join(os.tmpdir(),'qy-browser-')),share=path.join(root,'files'),state=path.join(root,'state'),socket=path.join(root,'test.sock');await fs.mkdir(share);await fs.writeFile(path.join(share,'中文测试.pdf'),fixture());
+const app=await createApplication({roots:[share],share,stateDir:state});await new Promise(r=>app.server.listen(socket,r));
+const proxy=http.createServer((req,res)=>{const remote=http.request({socketPath:socket,path:req.url,method:req.method,headers:{...req.headers,'x-trim-userid':'1000','x-trim-isadmin':'true','x-trim-username':'admin'}},response=>{res.writeHead(response.statusCode,response.headers);response.pipe(res);});remote.on('error',()=>res.destroy());req.pipe(remote);});await new Promise(r=>proxy.listen(0,'127.0.0.1',r));
+const browser=await chromium.launch({headless:true,...(process.env.QINGYE_BROWSER?{executablePath:process.env.QINGYE_BROWSER}:{})});
+try{
+ const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${proxy.address().port}${PREFIX}/`);
+ await page.locator('#pick').click();await page.locator('.nas-browser button').first().click();await page.locator('.nas-entry input[type=checkbox]').check();await page.getByRole('button',{name:'添加所选文件',exact:true}).click();await page.locator('#start').click();await page.waitForFunction(()=>document.querySelector('#summary').textContent.includes('1 个成功'));assert((await fs.stat(path.join(share,'中文测试_压缩版.pdf'))).size>0);
+ await page.getByRole('button',{name:'打开位置',exact:true}).click();await page.getByRole('link',{name:'下载到电脑'}).waitFor({state:'visible'});await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.locator('#clear').click();await page.locator('#dropzone input[type=file]').setInputFiles({name:'电脑上传.pdf',mimeType:'application/pdf',buffer:Buffer.from(fixture())});await page.waitForFunction(()=>document.querySelector('#count').textContent==='1 个文件');await page.locator('#start').click();await page.waitForFunction(()=>document.querySelector('#summary').textContent.includes('1 个成功'));
+ await fs.mkdir('artifacts',{recursive:true});await page.screenshot({path:'artifacts/fnos-preview.png'});await page.locator('[data-group=settings]').click();await page.waitForFunction(()=>document.querySelector('#roots').textContent.includes('files'));assert.deepEqual(errors,[]);console.log('PASS fnOS browser: NAS chooser, PDF conversion, downloads, local upload, authorization view');
+}finally{await browser.close();await app.close();await new Promise(r=>proxy.close(r));await fs.rm(root,{recursive:true,force:true});}
