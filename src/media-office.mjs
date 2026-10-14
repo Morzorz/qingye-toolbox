@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findEngine, runProcess } from './components.mjs';
 export async function convertExternal({operation,inputs,options,temp},signal,progress) {
@@ -7,31 +8,27 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
   if(!binary)throw new Error(`缺少${kind==='office'?'办公文档':'音视频'}组件，请先在「组件与 AI」中下载或选择已安装组件`);
   const base=path.basename(inputs[0],path.extname(inputs[0]));
   if(kind==='office') {
-    const profile=path.join(temp,'office-profile');await fs.mkdir(path.join(profile,'user'),{recursive:true});
-    // Headless Office can miss OS fonts. Register our CJK fallback in this
-    // task's private profile; do not install fonts globally or edit documents.
-    const fonts=path.join(profile,'user','fonts');await fs.mkdir(fonts,{recursive:true});
-    await fs.writeFile(path.join(fonts,'NotoSansSC-Regular.otf'),await fs.readFile(fileURLToPath(new URL('../assets/fonts/NotoSansSC-Regular.otf',import.meta.url))));
-    await fs.writeFile(path.join(profile,'user','registrymodifications.xcu'),'<?xml version="1.0" encoding="UTF-8"?><oor:items xmlns:oor="http://openoffice.org/2001/registry"><item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>');
-    const started=Date.now();
-    progress({percent:10,stage:'正在启动办公文档转换…'});
-    const heartbeat=setInterval(()=>{
-      const seconds=Math.floor((Date.now()-started)/1000);
-      progress({percent:10,stage:`正在转换办公文档… 已等待 ${seconds} 秒`});
-    },5000);
-    const output=path.join(temp,base+'.pdf');
-    const validPdf=async()=>{const file=await fs.open(output,'r').catch(()=>null);if(!file)return false;try{const b=Buffer.alloc(5);await file.read(b,0,5,0);return b.toString()==='%PDF-';}finally{await file.close();}};
-    let diagnostics='';
-    console.log('Qingye office conversion started:',JSON.stringify({input:inputs[0],output,engine:binary}));
+    // fnOS app-share volumes can reject LibreOffice profile locks. Keep all
+    // LibreOffice state and its first PDF write in the package-private temp dir,
+    // then copy the validated result into the authorized output directory.
+    const work=await fs.mkdtemp(path.join(os.tmpdir(),'qingye-office-'));
+    const profile=path.join(work,'profile');const output=path.join(work,base+'.pdf');
     try{
-      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000,successWhen:validPdf,onStdout:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);},onStderr:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);}});
-      console.log('Qingye office conversion completed:',JSON.stringify({input:inputs[0],output}));
-    }catch(error){console.error('Qingye office conversion failed:',JSON.stringify({input:inputs[0],output,error:error.message,diagnostics}));throw error;
-    }finally{clearInterval(heartbeat);}
-    const head=await fs.open(output,'r').catch(()=>null);
-    if(!head)throw new Error('办公组件未生成 PDF；请确认文件未加密且可正常打开');
-    try{const b=Buffer.alloc(5);await head.read(b,0,5,0);if(b.toString()!=='%PDF-')throw new Error('生成的 PDF 验证未通过');}finally{await head.close();}
-    const renamed=path.join(temp,base+'_转换.pdf');await fs.rename(output,renamed);return {outputs:[renamed]};
+      await fs.mkdir(path.join(profile,'user','fonts'),{recursive:true});
+      await fs.writeFile(path.join(profile,'user','fonts','NotoSansSC-Regular.otf'),await fs.readFile(fileURLToPath(new URL('../assets/fonts/NotoSansSC-Regular.otf',import.meta.url))));
+      await fs.writeFile(path.join(profile,'user','registrymodifications.xcu'),'<?xml version="1.0" encoding="UTF-8"?><oor:items xmlns:oor="http://openoffice.org/2001/registry"><item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>');
+      const started=Date.now();progress({percent:10,stage:'正在启动办公文档转换…'});
+      const heartbeat=setInterval(()=>{const seconds=Math.floor((Date.now()-started)/1000);progress({percent:10,stage:`正在转换办公文档… 已等待 ${seconds} 秒`});},5000);
+      const validPdf=async()=>{const file=await fs.open(output,'r').catch(()=>null);if(!file)return false;try{const b=Buffer.alloc(5);await file.read(b,0,5,0);return b.toString()==='%PDF-';}finally{await file.close();}};
+      let diagnostics='';console.log('Qingye office conversion started:',JSON.stringify({input:inputs[0],output,work,engine:binary}));
+      try{
+        await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',work,inputs[0]],{signal,timeoutMs:3*60*1000,successWhen:validPdf,onStdout:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);},onStderr:chunk=>{diagnostics=(diagnostics+chunk).slice(-2000);}});
+        console.log('Qingye office conversion completed:',JSON.stringify({input:inputs[0],output}));
+      }catch(error){console.error('Qingye office conversion failed:',JSON.stringify({input:inputs[0],output,work,error:error.message,diagnostics}));throw error;
+      }finally{clearInterval(heartbeat);}
+      if(!await validPdf())throw new Error('办公组件未生成 PDF；请确认文件未加密且可正常打开');
+      const renamed=path.join(temp,base+'_转换.pdf');await fs.copyFile(output,renamed);return {outputs:[renamed]};
+    }finally{await fs.rm(work,{recursive:true,force:true}).catch(()=>{});}
   }
   const format=operation==='audio_convert'?options.format:'mp4';const output=path.join(temp,`${base}_转换.${format}`);
   const args=['-hide_banner','-nostdin','-y','-protocol_whitelist','file,pipe','-i',inputs[0]];
