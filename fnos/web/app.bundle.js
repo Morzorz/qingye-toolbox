@@ -116,7 +116,18 @@ try {
     }
     function uploadOne(file, operation) {
       return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest(), url = base + "/api/upload?operation=" + encodeURIComponent(operation) + "&name=" + encodeURIComponent(file.name);
+        const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2), url = base + "/api/upload?operation=" + encodeURIComponent(operation) + "&name=" + encodeURIComponent(file.name) + "&id=" + encodeURIComponent(id), xhr = new XMLHttpRequest();
+        let poller;
+        const stop2 = () => clearInterval(poller);
+        const status = async () => {
+          try {
+            const r = await fetch(base + "/api/upload-status?id=" + encodeURIComponent(id));
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.stage) document.getElementById("message").textContent = data.stage + "：" + file.name + "…";
+          } catch {
+          }
+        };
         xhr.open("POST", url, true);
         xhr.responseType = "text";
         xhr.timeout = 10 * 60 * 1e3;
@@ -125,8 +136,13 @@ try {
         xhr.upload.onprogress = (e) => {
           const percent = e.lengthComputable ? Math.floor(e.loaded / e.total * 100) : null;
           document.getElementById("message").textContent = percent === null ? "正在上传 " + file.name + "…" : "正在上传 " + file.name + "… " + percent + "%";
+          if (percent === 100 && !poller) {
+            status();
+            poller = setInterval(status, 1500);
+          }
         };
         xhr.onload = () => {
+          stop2();
           let data;
           try {
             data = JSON.parse(xhr.responseText);
@@ -140,9 +156,18 @@ try {
           }
           resolve(data);
         };
-        xhr.onerror = () => reject(Error("上传连接中断，请检查飞牛应用是否正在运行后重试"));
-        xhr.ontimeout = () => reject(Error("上传等待超过 10 分钟，已停止。请检查 NAS 存储空间和应用日志后重试"));
-        xhr.onabort = () => reject(Error("上传已取消"));
+        xhr.onerror = () => {
+          stop2();
+          reject(Error("上传连接中断，请检查飞牛应用是否正在运行后重试"));
+        };
+        xhr.ontimeout = () => {
+          stop2();
+          reject(Error("上传等待超过 10 分钟，已停止。请检查 NAS 存储空间和应用日志后重试"));
+        };
+        xhr.onabort = () => {
+          stop2();
+          reject(Error("上传已取消"));
+        };
         xhr.send(file);
       });
     }

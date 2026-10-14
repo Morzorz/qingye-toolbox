@@ -21,7 +21,8 @@ export async function createApplication({roots,share,stateDir}){
  const protectedRoots=await Promise.all([stateDir,project,process.env.TRIM_PKGETC,process.env.TRIM_PKGHOME].filter(Boolean).map(p=>fs.realpath(p).catch(()=>path.resolve(p))));
  const uploadBase=path.join(inboxRoot,'上传文件');
  try{if((await fs.lstat(uploadBase)).isDirectory())for(const entry of await fs.readdir(uploadBase,{withFileTypes:true})){if(!entry.isDirectory()||!/^\d+$/.test(entry.name))continue;const dir=path.join(uploadBase,entry.name);for(const f of await fs.readdir(dir,{withFileTypes:true}))if(f.isFile()&&/^\.upload-[a-f0-9-]{36}$/.test(f.name))await fs.unlink(path.join(dir,f.name));}}catch(e){if(e.code!=='ENOENT')throw e;}
- const jobs=new JobService(),owners=new Map();let closing=false;
+ const jobs=new JobService(),owners=new Map(),uploads=new Map();let closing=false;
+ const updateUpload=(id,uid,patch)=>{if(!id)return;uploads.set(id,{...(uploads.get(id)||{uid,createdAt:Date.now()}),...patch,uid,updatedAt:Date.now()});while(uploads.size>100)uploads.delete(uploads.keys().next().value);};
  async function authorize(inputs,out){for(const p of [...inputs,out]){if(typeof p!=='string'||!path.isAbsolute(p))throw fail('需要绝对路径');const real=await fs.realpath(p);if(!allowed.some(r=>inside(r,real))||protectedRoots.some(r=>inside(r,real)))throw fail('文件不在授权目录内或属于应用内部数据',403);}}
  async function location(p){await authorize([],p);return fs.realpath(p);}
  function own(uid,id){if(owners.get(id)!==uid)throw fail('任务不存在或无权访问',404);return jobs.snapshot(id);}
@@ -39,14 +40,14 @@ export async function createApplication({roots,share,stateDir}){
    if(req.method==='POST'&&req.headers['x-qingye-request']!=='1')throw fail('无效请求标记',403);
    if(req.method==='GET'&&route==='/'){
     if(url.pathname===PREFIX){res.writeHead(302,{Location:PREFIX+'/'});res.end();return;}
-    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.1').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
+    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.4').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
     // Deliver one hash-authorized classic script with the document. No module MIME or relative script URL dependency.
     const script=await fs.readFile(path.join(project,'fnos/web/app.bundle.js'),'utf8');
     const hash=createHash('sha256').update(script).digest('base64');
     const policy=basePolicy.replace("script-src 'self'",`script-src 'self' 'sha256-${hash}'`);
     html=html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,'')
      .replace('<script type="module" src="toolbox-ui.mjs"></script>',()=>'<script>'+script+'</script>')
-     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.3"`)
+     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.4"`)
      .replace('<div id="message" role="status" aria-live="polite"></div>','<div id="message" role="status" aria-live="polite">界面正在加载；如菜单不能切换，请刷新页面。</div>');
     res.setHeader('Content-Security-Policy',policy);
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);return;
@@ -64,16 +65,17 @@ export async function createApplication({roots,share,stateDir}){
     const {paths,operation}=await body(req);if(!OPERATIONS[operation]||!Array.isArray(paths)||paths.length>100)throw fail('文件选择无效');const added=[],errors=[];
     for(const p of paths){try{const real=await location(p),s=await fs.stat(real);if(!s.isFile()||!OPERATIONS[operation].extensions.includes(path.extname(real).slice(1).toLowerCase()))throw Error('不支持此文件类型');added.push({path:real,name:path.basename(real),size:s.size});}catch(e){errors.push(e.message);}}json(res,{added,errors});return;
    }
+   if(req.method==='GET'&&route==='/api/upload-status'){const id=url.searchParams.get('id'),upload=uploads.get(id);if(!upload||upload.uid!==uid)throw fail('上传记录不存在或已过期',404);json(res,upload);return;}
    if(req.method==='POST'&&route==='/api/upload'){
-    const operation=url.searchParams.get('operation'),name=url.searchParams.get('name');if(!OPERATIONS[operation]||typeof name!=='string'||name!==path.basename(name)||name.startsWith('.')||/[\\\x00-\x1f]/.test(name)||name.length>200||!OPERATIONS[operation].extensions.includes(path.extname(name).slice(1).toLowerCase()))throw fail('不支持的上传文件');
+    const operation=url.searchParams.get('operation'),name=url.searchParams.get('name'),uploadId=url.searchParams.get('id');if(uploadId&&!/^[a-zA-Z0-9_-]{8,80}$/.test(uploadId))throw fail('上传标识无效');if(!OPERATIONS[operation]||typeof name!=='string'||name!==path.basename(name)||name.startsWith('.')||/[\\\x00-\x1f]/.test(name)||name.length>200||!OPERATIONS[operation].extensions.includes(path.extname(name).slice(1).toLowerCase()))throw fail('不支持的上传文件');
     const limit=['audio_convert','video_convert'].includes(operation)?20*1024**3:500*1024**2;if(Number(req.headers['content-length'])>limit)throw fail('上传文件过大',413);
     await fs.mkdir(uploadBase,{recursive:true});await location(uploadBase);
     const folder=path.join(uploadBase,uid);await fs.mkdir(folder,{recursive:true});await location(folder);
-    const partial=path.join(folder,'.upload-'+randomUUID());let count=0;
-    try{await pipeline(req,new Transform({transform(chunk,enc,cb){count+=chunk.length;cb(count>limit?fail('上传文件超出大小限制',413):null,chunk);}}),createWriteStream(partial,{flags:'wx',mode:0o600}));if(!count)throw fail('空文件');await location(folder);let dest;
-     for(let n=0;n<10000;n++){dest=path.join(folder,n?`${path.basename(name,path.extname(name))} (${n})${path.extname(name)}`:name);try{await fs.link(partial,dest);break;}catch(e){if(e.code!=='EEXIST'||n===9999)throw e;}}
-     json(res,{added:[{path:dest,name:path.basename(dest),size:count}],errors:[]});
-    }finally{await fs.unlink(partial).catch(()=>{});}return;
+    const partial=path.join(folder,'.upload-'+randomUUID());let count=0;updateUpload(uploadId,uid,{name,stage:'正在接收文件',received:0,status:'receiving'});
+    try{await pipeline(req,new Transform({transform(chunk,enc,cb){count+=chunk.length;updateUpload(uploadId,uid,{name,stage:'正在写入 NAS',received:count,status:'receiving'});cb(count>limit?fail('上传文件超出大小限制',413):null,chunk);}}),createWriteStream(partial,{flags:'wx',mode:0o600}));if(!count)throw fail('空文件');await location(folder);let dest;updateUpload(uploadId,uid,{name,stage:'文件已收到，正在保存到共享目录',received:count,status:'saving'});
+     for(let n=0;n<10000;n++){dest=path.join(folder,n?`${path.basename(name,path.extname(name))} (${n})${path.extname(name)}`:name);try{await fs.copyFile(partial,dest,constants.COPYFILE_EXCL);break;}catch(e){if(e.code!=='EEXIST'||n===9999)throw e;}}
+     updateUpload(uploadId,uid,{name,stage:'保存完成',received:count,status:'completed',path:dest});json(res,{added:[{path:dest,name:path.basename(dest),size:count}],errors:[]});
+    }catch(e){updateUpload(uploadId,uid,{name,stage:'上传失败：'+e.message,received:count,status:'failed'});console.error('Qingye upload failed:',e.message);throw e;}finally{await fs.unlink(partial).catch(()=>{});}return;
    }
    if(req.method==='POST'&&route==='/api/jobs'){const request=await body(req);const r=await jobs.submit(request,authorize);owners.set(r.jobId,uid);for(const id of owners.keys())if(!jobs.jobs.has(id))owners.delete(id);json(res,r);return;}
    if(req.method==='GET'&&route==='/api/job'){json(res,own(uid,url.searchParams.get('id')));return;}

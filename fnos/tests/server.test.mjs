@@ -22,7 +22,7 @@ test('page carries a self-contained script authorized by its exact CSP hash',asy
  const response=await req('/'),html=response.raw.toString(),script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
  assert(script);assert(!html.includes('type="module"'));assert(!/<script[^>]+src=/.test(html));
  const hash=createHash('sha256').update(script).digest('base64');assert(response.headers['content-security-policy'].includes("'sha256-"+hash+"'"));assert(!response.headers['content-security-policy'].includes("'unsafe-inline'"));assert.equal(response.headers['cache-control'],'no-store');
- assert(html.includes('/app/qingye/styles.css?v=1.2.3'));
+ assert(html.includes('/app/qingye/styles.css?v=1.2.4'));
 });
 test('NAS picker rejects traversal and symlink escape',async()=>{
  const r=await req('/api/list?path='+encodeURIComponent(share));assert.equal(r.status,200);assert(!r.body.entries.some(e=>e.name==='escape.pdf'));
@@ -30,7 +30,7 @@ test('NAS picker rejects traversal and symlink escape',async()=>{
  const s=await req('/api/select',{method:'POST',data:{paths:[input,path.join(share,'escape.pdf')],operation:'pdf_compress'}});assert.equal(s.body.added.length,1);assert.equal(s.body.errors.length,1);
 });
 test('upload collision-safe, conversion, user ownership and downloads',async()=>{
- for(let n=0;n<2;n++){const r=await req('/api/upload?operation=pdf_compress&name=upload.pdf',{method:'POST',data:fixture()});assert.equal(r.status,200);assert(r.body.added[0].path.endsWith(n?'upload (1).pdf':'upload.pdf'));}
+ for(let n=0;n<2;n++){const uploadId='test-upload-'+n+'-abcdefgh';const r=await req('/api/upload?operation=pdf_compress&name=upload.pdf&id='+uploadId,{method:'POST',data:fixture()});assert.equal(r.status,200);assert(r.body.added[0].path.endsWith(n?'upload (1).pdf':'upload.pdf'));const state=await req('/api/upload-status?id='+uploadId);assert.equal(state.body.status,'completed');assert.equal(state.body.path,r.body.added[0].path);}
  assert.equal((await req('/api/upload?operation=pdf_compress&name=../bad.pdf',{method:'POST',data:fixture()})).status,400);
  const r=await req('/api/jobs',{method:'POST',data:{operation:'pdf_compress',inputs:[input],outputDir:share}});assert.equal(r.status,200);const id=r.body.jobId;
  assert.equal((await req('/api/job?id='+id,{headers:{'X-Trim-Userid':'1001'}})).status,404);assert.equal((await req('/api/cancel',{method:'POST',data:{id},headers:{'X-Trim-Userid':'1001'}})).status,404);
