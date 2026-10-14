@@ -19,10 +19,12 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
       const seconds=Math.floor((Date.now()-started)/1000);
       progress({percent:10,stage:`正在转换办公文档… 已等待 ${seconds} 秒`});
     },5000);
+    const output=path.join(temp,base+'.pdf');
+    const validPdf=async()=>{const file=await fs.open(output,'r').catch(()=>null);if(!file)return false;try{const b=Buffer.alloc(5);await file.read(b,0,5,0);return b.toString()==='%PDF-';}finally{await file.close();}};
     try{
-      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000});
+      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000,successWhen:validPdf});
     }finally{clearInterval(heartbeat);}
-    const output=path.join(temp,base+'.pdf');const head=await fs.open(output,'r').catch(()=>null);
+    const head=await fs.open(output,'r').catch(()=>null);
     if(!head)throw new Error('办公组件未生成 PDF；请确认文件未加密且可正常打开');
     try{const b=Buffer.alloc(5);await head.read(b,0,5,0);if(b.toString()!=='%PDF-')throw new Error('生成的 PDF 验证未通过');}finally{await head.close();}
     const renamed=path.join(temp,base+'_转换.pdf');await fs.rename(output,renamed);return {outputs:[renamed]};

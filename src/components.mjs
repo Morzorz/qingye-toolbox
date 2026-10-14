@@ -11,19 +11,19 @@ export async function findEngine(kind) {
   return null;
 }
 export async function componentStatus() {return {media:await findEngine('media'),office:await findEngine('office')};}
-export function runProcess(binary,args,{signal,onStdout=()=>{},onStderr=()=>{},timeoutMs=3*60*60*1000}={}) {
+export function runProcess(binary,args,{signal,onStdout=()=>{},onStderr=()=>{},timeoutMs=3*60*60*1000,successWhen=null,successPollMs=500}={}) {
   return new Promise((resolve,reject)=>{
     if(signal?.aborted){reject(new Error('已取消'));return;}
     const child=spawn(binary,args,{shell:false,windowsHide:true,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
-    let stderr='',finished=false,timedOut=false,killTimer;
+    let stderr='',finished=false,timedOut=false,completedEarly=false,killTimer,successTimer;
     function terminate(){
       if(!child.pid)return;
       if(process.platform==='win32')spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'}).on('error',()=>child.kill());
       else {try{process.kill(-child.pid,'SIGTERM');}catch{}killTimer=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}},1500);}
     }
     const timer=setTimeout(()=>{timedOut=true;terminate();},timeoutMs);signal?.addEventListener('abort',terminate,{once:true});
-    function finish(error){if(finished)return;finished=true;clearTimeout(timer);clearTimeout(killTimer);signal?.removeEventListener('abort',terminate);error?reject(error):resolve({stderr});}
+    function finish(error){if(finished)return;finished=true;clearTimeout(timer);clearTimeout(killTimer);clearInterval(successTimer);signal?.removeEventListener('abort',terminate);error?reject(error):resolve({stderr});}
     child.stdout.on('data',d=>onStdout(d.toString()));child.stderr.on('data',d=>{stderr=(stderr+d).slice(-12000);onStderr(d.toString());});
-    child.on('error',e=>finish(e));child.on('close',code=>finish(signal?.aborted?new Error('已取消'):timedOut?new Error('处理超时，请缩短文件后重试'):code!==0?new Error(`转换失败 (${code})：${stderr.slice(-1200)}`):null));
+    child.on('error',e=>finish(e));if(successWhen){const confirm=async()=>{try{if(!finished&&!signal?.aborted&&await successWhen()){completedEarly=true;terminate();}}catch{}};successTimer=setInterval(confirm,successPollMs);confirm();}child.on('close',code=>finish(signal?.aborted?new Error('已取消'):completedEarly?null:timedOut?new Error(`处理超时，办公组件未完成响应${stderr?`：${stderr.slice(-800)}`:''}`):code!==0?new Error(`转换失败 (${code})：${stderr.slice(-1200)}`):null));
   });
 }
