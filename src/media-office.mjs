@@ -13,8 +13,15 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
     const fonts=path.join(profile,'user','fonts');await fs.mkdir(fonts,{recursive:true});
     await fs.writeFile(path.join(fonts,'NotoSansSC-Regular.otf'),await fs.readFile(fileURLToPath(new URL('../assets/fonts/NotoSansSC-Regular.otf',import.meta.url))));
     await fs.writeFile(path.join(profile,'user','registrymodifications.xcu'),'<?xml version="1.0" encoding="UTF-8"?><oor:items xmlns:oor="http://openoffice.org/2001/registry"><item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>');
-    progress({percent:10,stage:'正在转换办公文档…'});
-    await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--nologo','--nodefault','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:10*60*1000});
+    const started=Date.now();
+    progress({percent:10,stage:'正在启动办公文档转换…'});
+    const heartbeat=setInterval(()=>{
+      const seconds=Math.floor((Date.now()-started)/1000);
+      progress({percent:10,stage:`正在转换办公文档… 已等待 ${seconds} 秒`});
+    },5000);
+    try{
+      await runProcess(binary,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--invisible','--nologo','--nodefault','--nofirststartwizard','--nolockcheck','--norestore','--convert-to','pdf','--outdir',temp,inputs[0]],{signal,timeoutMs:3*60*1000});
+    }finally{clearInterval(heartbeat);}
     const output=path.join(temp,base+'.pdf');const head=await fs.open(output,'r').catch(()=>null);
     if(!head)throw new Error('办公组件未生成 PDF；请确认文件未加密且可正常打开');
     try{const b=Buffer.alloc(5);await head.read(b,0,5,0);if(b.toString()!=='%PDF-')throw new Error('生成的 PDF 验证未通过');}finally{await head.close();}

@@ -22,7 +22,7 @@ test('page carries a self-contained script authorized by its exact CSP hash',asy
  const response=await req('/'),html=response.raw.toString(),script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
  assert(script);assert(!html.includes('type="module"'));assert(!/<script[^>]+src=/.test(html));
  const hash=createHash('sha256').update(script).digest('base64');assert(response.headers['content-security-policy'].includes("'sha256-"+hash+"'"));assert(!response.headers['content-security-policy'].includes("'unsafe-inline'"));assert.equal(response.headers['cache-control'],'no-store');
- assert(html.includes('/app/qingye/styles.css?v=1.2.6'));
+ assert(html.includes('/app/qingye/styles.css?v=1.2.7'));
 });
 test('NAS picker rejects traversal and symlink escape',async()=>{
  const r=await req('/api/list?path='+encodeURIComponent(share));assert.equal(r.status,200);assert(!r.body.entries.some(e=>e.name==='escape.pdf'));
