@@ -10,4 +10,4 @@ for(const size of [64,256]){const bytes=await sharp(path.join(root,'assets/icon.
 for(const name of await fs.readdir(build+'/cmd'))await fs.chmod(build+'/cmd/'+name,0o755);
 const tool=process.env.FNPACK||'fnpack';const r=spawnSync(tool,['build','--directory',build],{cwd:build,stdio:'inherit'});if(r.status!==0)throw Error('fnpack failed');const result=(await fs.readdir(build)).find(n=>n.endsWith('.fpk'));if(!result)throw Error('fnpack did not produce an FPK');
 await fs.mkdir(path.join(root,'release'),{recursive:true});
-const dest=path.join(root,'release/Qingye-Toolbox-1.2.1-fnos-x86.fpk');await fs.copyFile(path.join(build,result),dest);console.log(dest);
+const dest=path.join(root,'release/Qingye-Toolbox-1.2.2-fnos-x86.fpk');await fs.copyFile(path.join(build,result),dest);console.log(dest);

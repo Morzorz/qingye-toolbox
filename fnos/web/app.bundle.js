@@ -15,7 +15,9 @@ try {
       d.className = "nas-dialog";
       const h = document.createElement("h2");
       h.textContent = title;
-      const content = document.createElement("div"), bar = document.createElement("div");
+      const content = document.createElement("div");
+      content.className = "nas-dialog-content";
+      const bar = document.createElement("div");
       bar.className = "nas-dialog-actions";
       const cancel = document.createElement("button");
       cancel.textContent = "关闭";
@@ -200,8 +202,12 @@ try {
     picker.type = "file";
     picker.multiple = true;
     picker.hidden = true;
-    uploadButton.onclick = (e) => {
-      e.stopPropagation();
+    const stop = (e) => e.stopPropagation();
+    for (const type of ["pointerdown", "mousedown", "click"]) {
+      uploadButton.addEventListener(type, stop);
+      picker.addEventListener(type, stop);
+    }
+    uploadButton.onclick = () => {
       if (!document.getElementById("cancel").hidden) return;
       picker.click();
     };
@@ -390,7 +396,8 @@ try {
     e.stopPropagation();
     safe(async () => added(await api.pickFiles(op())))();
   };
-  $("dropzone").onclick = () => {
+  $("dropzone").onclick = (e) => {
+    if (e.target.closest("button,input,label,a")) return;
     if (!busy) safe(async () => added(await api.pickFiles(op())))();
   };
   $("dropzone").onkeydown = (e) => {

@@ -1,5 +1,5 @@
 appname=qingye
-version=1.2.1
+version=1.2.2
 display_name=轻页文件工具箱
 desc=独立运行的 PDF、图片、办公文档与音视频转换工具。文件在 NAS 本机处理，保留原文件。首版限管理员使用。
 platform=x86
