@@ -15,14 +15,14 @@ async function wait(id,headers){let r;for(let n=0;n<100;n++){r=await req('/api/j
 test('startup removes abandoned uploads and preserves completed files',async()=>{await assert.rejects(fs.stat(stale),{code:'ENOENT'});assert((await fs.stat(path.join(staleDir,'keep.pdf'))).size>0);});
 test('gateway and admin authentication, origin and static boundaries',async()=>{
  assert.equal((await req('/',{headers:{'X-Trim-Userid':''}})).status,403);assert.equal((await req('/',{headers:{'X-Trim-Isadmin':'false'}})).status,403);
- assert.equal((await req('/api/jobs',{method:'POST',data:{},headers:{Origin:'https://evil.example'}})).status,403);assert.equal((await req('/api/jobs',{method:'POST',data:{},headers:{'X-Qingye-Request':''}})).status,403);
+ assert.equal((await req('/api/jobs',{method:'POST',data:{},headers:{Origin:'notaurl'}})).status,403);assert.equal((await req('/api/jobs',{method:'POST',data:{},headers:{Origin:'https://gateway.example'}})).status,400);assert.equal((await req('/api/jobs',{method:'POST',data:{},headers:{'X-Qingye-Request':''}})).status,403);
  assert.equal((await req('/package.json')).status,404);assert.equal((await req('/')).status,200);
 });
 test('page carries a self-contained script authorized by its exact CSP hash',async()=>{
  const response=await req('/'),html=response.raw.toString(),script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
  assert(script);assert(!html.includes('type="module"'));assert(!/<script[^>]+src=/.test(html));
  const hash=createHash('sha256').update(script).digest('base64');assert(response.headers['content-security-policy'].includes("'sha256-"+hash+"'"));assert(!response.headers['content-security-policy'].includes("'unsafe-inline'"));assert.equal(response.headers['cache-control'],'no-store');
- assert(html.includes('/app/qingye/styles.css?v=1.2.4'));
+ assert(html.includes('/app/qingye/styles.css?v=1.2.5'));
 });
 test('NAS picker rejects traversal and symlink escape',async()=>{
  const r=await req('/api/list?path='+encodeURIComponent(share));assert.equal(r.status,200);assert(!r.body.entries.some(e=>e.name==='escape.pdf'));
