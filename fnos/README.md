@@ -4,7 +4,7 @@
 
 ## 安装使用
 
-1. 飞牛应用中心 → 手动安装，选择 `Qingye-Toolbox-1.2.0-fnos-x86.fpk`，选择存储空间。
+1. 飞牛应用中心 → 手动安装，选择 `Qingye-Toolbox-1.2.1-fnos-x86.fpk`，选择存储空间。
 2. 安装后启动应用，使用飞牛管理员账号点击桌面“轻页文件工具箱”。
 3. 默认使用应用创建的 `qingye/files` 共享目录。需要处理其他位置时，在飞牛的应用设置中给轻页授权相应目录，然后停止并重新启动轻页。
 4. 点击“选择 NAS 文件”，进入授权目录并勾选文件。也可以拖入电脑文件或点击“上传电脑文件”；上传文件保存在共享目录下“上传文件/用户ID”。
@@ -12,6 +12,10 @@
 6. 处理后点击“打开位置”查看 NAS 结果路径或下载到电脑。文件重名会自动编号；原文件不覆盖。
 
 首版限管理员使用。应用使用自己的低权限账号，仅在飞牛授权的目录内访问文件。修改授权后需要重启应用以刷新目录列表；系统撤销的文件权限即时由操作系统执行。前端复用飞牛统一网关登录，无独立公开 TCP 端口。
+
+## 从 1.2.0 更新
+
+在应用中心手动安装 1.2.1 FPK，更新已有的轻页应用，无需先卸载。更新完成后关闭原来的轻页窗口，再从飞牛桌面打开；必要时刷新浏览器页面。左下角应显示“飞牛独立版 1.2.1”。本次修复菜单和下拉选项初始化的脚本加载兼容性，界面不再依赖额外模块脚本请求。如果仍未加载，页面会保留加载提示或显示具体启动错误。
 
 ## 功能和限制
 
@@ -36,6 +40,7 @@ NAS 文件不需要上传到电脑或云端。电脑文件的“上传”仅进�
 
 ```
 npm ci
+node fnos/build-client.mjs
 docker build --platform linux/amd64 -f fnos/Dockerfile --target payload --output type=local,dest=fnos/build/payload .
 QINGYE_FIXTURES=/path/to/office-fixtures sh fnos/tests/validate-linux.sh
 FNPACK=/path/to/fnpack node fnos/build-fpk.mjs

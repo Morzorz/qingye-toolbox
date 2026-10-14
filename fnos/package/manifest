@@ -1,5 +1,5 @@
 appname=qingye
-version=1.2.0
+version=1.2.1
 display_name=轻页文件工具箱
 desc=独立运行的 PDF、图片、办公文档与音视频转换工具。文件在 NAS 本机处理，保留原文件。首版限管理员使用。
 platform=x86
@@ -11,4 +11,4 @@ checkport=false
 desktop_uidir=ui
 desktop_applaunchname=qingye.main
 disable_authorization_path=false
-changelog=飞牛独立版：内置转换组件和中文字体，通过飞牛桌面使用，支持目录授权、批量转换、进度及取消。
+changelog=修复飞牛页面菜单和下拉选项加载兼容性；界面脚本随页面交付，增加启动错误提示。

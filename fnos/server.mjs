@@ -3,12 +3,13 @@ import fs from 'node:fs/promises';
 import {createReadStream,createWriteStream,constants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {JobService} from '../src/jobs.mjs';
 import {OPERATIONS} from '../src/catalog.mjs';
 import {componentStatus} from '../src/components.mjs';
+const basePolicy="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'";
 const project=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const PREFIX='/app/qingye';
 const inside=(root,p)=>{const r=path.relative(root,p);return r===''||(!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
@@ -28,7 +29,7 @@ export async function createApplication({roots,share,stateDir}){
  async function body(req){let text='';for await(const chunk of req){text+=chunk;if(Buffer.byteLength(text)>65536)throw fail('请求过大',413);}try{return JSON.parse(text);}catch{throw fail('无效 JSON');}}
  const assets={'styles.css':'src/styles.css','toolbox.css':'src/toolbox.css','catalog.mjs':'src/catalog.mjs','toolbox-ui.mjs':'src/toolbox-ui.mjs','bridge.js':'fnos/web/bridge.js','nas.css':'fnos/web/nas.css'};
  const server=http.createServer(async(req,res)=>{
-  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'");
+  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('Content-Security-Policy',basePolicy);
   try{
    if(closing)throw fail('应用正在停止',503);
    const uid=req.headers['x-trim-userid'];if(typeof uid!=='string'||!/^\d+$/.test(uid)||req.headers['x-trim-isadmin']!=='true')throw fail('请使用飞牛管理员账号从桌面打开轻页',403);
@@ -38,7 +39,16 @@ export async function createApplication({roots,share,stateDir}){
    if(req.method==='POST'&&req.headers['x-qingye-request']!=='1')throw fail('无效请求标记',403);
    if(req.method==='GET'&&route==='/'){
     if(url.pathname===PREFIX){res.writeHead(302,{Location:PREFIX+'/'});res.end();return;}
-    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('<script type="module" src="toolbox-ui.mjs">','<script src="bridge.js"></script><script type="module" src="toolbox-ui.mjs">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.0').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
+    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.1').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
+    // Deliver one hash-authorized classic script with the document. No module MIME or relative script URL dependency.
+    const script=await fs.readFile(path.join(project,'fnos/web/app.bundle.js'),'utf8');
+    const hash=createHash('sha256').update(script).digest('base64');
+    const policy=basePolicy.replace("script-src 'self'",`script-src 'self' 'sha256-${hash}'`);
+    html=html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,'')
+     .replace('<script type="module" src="toolbox-ui.mjs"></script>',()=>'<script>'+script+'</script>')
+     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.1"`)
+     .replace('<div id="message" role="status" aria-live="polite"></div>','<div id="message" role="status" aria-live="polite">界面正在加载；如菜单不能切换，请刷新页面。</div>');
+    res.setHeader('Content-Security-Policy',policy);
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);return;
    }
    const asset=assets[route.slice(1)];if(req.method==='GET'&&asset){let data=await fs.readFile(path.join(project,asset));if(asset.endsWith('toolbox-ui.mjs'))data=Buffer.from(data.toString().replaceAll('组件与 AI','组件与目录'));res.writeHead(200,{'Content-Type':asset.endsWith('.css')?'text/css':'text/javascript','Cache-Control':'no-cache'});res.end(data);return;}
