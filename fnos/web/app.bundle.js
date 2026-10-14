@@ -114,62 +114,37 @@ try {
         load(null);
       });
     }
-    function uploadOne(file, operation) {
-      return new Promise((resolve, reject) => {
-        const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2), url = base + "/api/upload?operation=" + encodeURIComponent(operation) + "&name=" + encodeURIComponent(file.name) + "&id=" + encodeURIComponent(id), xhr = new XMLHttpRequest();
-        let poller;
-        const stop2 = () => clearInterval(poller);
-        const status = async () => {
-          try {
-            const r = await fetch(base + "/api/upload-status?id=" + encodeURIComponent(id));
-            if (!r.ok) return;
-            const data = await r.json();
-            if (data.stage) document.getElementById("message").textContent = data.stage + "：" + file.name + "…";
-          } catch {
-          }
-        };
-        xhr.open("POST", url, true);
-        xhr.responseType = "text";
-        xhr.timeout = 10 * 60 * 1e3;
-        xhr.setRequestHeader("Content-Type", "application/octet-stream");
-        xhr.setRequestHeader("X-Qingye-Request", "1");
-        xhr.upload.onprogress = (e) => {
-          const percent = e.lengthComputable ? Math.floor(e.loaded / e.total * 100) : null;
-          document.getElementById("message").textContent = percent === null ? "正在上传 " + file.name + "…" : "正在上传 " + file.name + "… " + percent + "%";
-          if (percent === 100 && !poller) {
-            status();
-            poller = setInterval(status, 1500);
-          }
-        };
-        xhr.onload = () => {
-          stop2();
-          let data;
-          try {
-            data = JSON.parse(xhr.responseText);
-          } catch {
-            reject(Error("上传返回内容无效，请重试"));
-            return;
-          }
-          if (xhr.status < 200 || xhr.status >= 300) {
-            reject(Error(data.error || "上传失败 (" + xhr.status + ")"));
-            return;
-          }
-          resolve(data);
-        };
-        xhr.onerror = () => {
-          stop2();
-          reject(Error("上传连接中断，请检查飞牛应用是否正在运行后重试"));
-        };
-        xhr.ontimeout = () => {
-          stop2();
-          reject(Error("上传等待超过 10 分钟，已停止。请检查 NAS 存储空间和应用日志后重试"));
-        };
-        xhr.onabort = () => {
-          stop2();
-          reject(Error("上传已取消"));
-        };
-        xhr.send(file);
-      });
+    async function uploadOne(file, operation) {
+      const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2), message = document.getElementById("message");
+      let started = false;
+      const call = async (route, body, raw = false) => {
+        const controller = new AbortController(), timer2 = setTimeout(() => controller.abort(), 6e4);
+        try {
+          const r = await fetch(base + "/api/" + route, { method: "POST", headers: raw ? { "Content-Type": "application/octet-stream", "X-Qingye-Request": "1" } : { "Content-Type": "application/json", "X-Qingye-Request": "1" }, body: raw ? body : JSON.stringify(body), signal: controller.signal });
+          const data = await r.json();
+          if (!r.ok) throw Error(data.error || "上传失败 (" + r.status + ")");
+          return data;
+        } finally {
+          clearTimeout(timer2);
+        }
+      };
+      try {
+        const startedUpload = await call("upload-start", { id, operation, name: file.name, size: file.size });
+        started = true;
+        const chunkSize = startedUpload.chunkSize;
+        for (let offset = 0; offset < file.size; offset += chunkSize) {
+          const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size)), data = await call("upload-chunk?id=" + encodeURIComponent(id), chunk, true);
+          const percent = Math.floor(data.received / file.size * 100);
+          message.textContent = "正在上传 " + file.name + "… " + percent + "%";
+        }
+        message.textContent = "文件已收到，正在保存到共享目录…";
+        return await call("upload-finish", { id });
+      } catch (e) {
+        if (started) request("upload-cancel", { id }).catch(() => {
+        });
+        if (e.name === "AbortError") throw Error("某个上传分块超过 60 秒未收到 NAS 确认，请检查应用状态后重试");
+        throw e;
+      }
     }
     async function upload(files2, operation) {
       if (files2.length > 100) throw Error("每批最多上传 100 个文件");

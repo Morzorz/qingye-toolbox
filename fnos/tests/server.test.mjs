@@ -22,12 +22,19 @@ test('page carries a self-contained script authorized by its exact CSP hash',asy
  const response=await req('/'),html=response.raw.toString(),script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
  assert(script);assert(!html.includes('type="module"'));assert(!/<script[^>]+src=/.test(html));
  const hash=createHash('sha256').update(script).digest('base64');assert(response.headers['content-security-policy'].includes("'sha256-"+hash+"'"));assert(!response.headers['content-security-policy'].includes("'unsafe-inline'"));assert.equal(response.headers['cache-control'],'no-store');
- assert(html.includes('/app/qingye/styles.css?v=1.2.5'));
+ assert(html.includes('/app/qingye/styles.css?v=1.2.6'));
 });
 test('NAS picker rejects traversal and symlink escape',async()=>{
  const r=await req('/api/list?path='+encodeURIComponent(share));assert.equal(r.status,200);assert(!r.body.entries.some(e=>e.name==='escape.pdf'));
  assert.equal((await req('/api/list?path='+encodeURIComponent(root))).status,403);
  const s=await req('/api/select',{method:'POST',data:{paths:[input,path.join(share,'escape.pdf')],operation:'pdf_compress'}});assert.equal(s.body.added.length,1);assert.equal(s.body.errors.length,1);
+});
+test('chunked upload confirms every block before saving to the shared directory',async()=>{
+ const id='chunked-upload-abcdefgh',bytes=Buffer.concat([Buffer.from(fixture()),Buffer.alloc(1024*1024)]);
+ const start=await req('/api/upload-start',{method:'POST',data:{id,operation:'pdf_compress',name:'large.pdf',size:bytes.length}});assert.equal(start.status,200);assert.equal(start.body.chunkSize,512*1024);
+ for(let offset=0;offset<bytes.length;offset+=start.body.chunkSize){const chunk=bytes.subarray(offset,Math.min(offset+start.body.chunkSize,bytes.length));const result=await req('/api/upload-chunk?id='+id,{method:'POST',data:chunk});assert.equal(result.status,200);}
+ const finish=await req('/api/upload-finish',{method:'POST',data:{id}});assert.equal(finish.status,200);assert.equal((await fs.stat(finish.body.added[0].path)).size,bytes.length);
+ const state=await req('/api/upload-status?id='+id);assert.equal(state.body.status,'completed');
 });
 test('upload collision-safe, conversion, user ownership and downloads',async()=>{
  for(let n=0;n<2;n++){const uploadId='test-upload-'+n+'-abcdefgh';const r=await req('/api/upload?operation=pdf_compress&name=upload.pdf&id='+uploadId,{method:'POST',data:fixture()});assert.equal(r.status,200);assert(r.body.added[0].path.endsWith(n?'upload (1).pdf':'upload.pdf'));const state=await req('/api/upload-status?id='+uploadId);assert.equal(state.body.status,'completed');assert.equal(state.body.path,r.body.added[0].path);}
