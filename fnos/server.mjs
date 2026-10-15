@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import {JobService} from '../src/jobs.mjs';
 import {OPERATIONS} from '../src/catalog.mjs';
 import {componentStatus} from '../src/components.mjs';
+import {createLocalMcpServer} from './local-mcp.mjs';
 const basePolicy="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'";
 const project=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const PREFIX='/app/qingye';
@@ -44,20 +45,20 @@ export async function createApplication({roots,share,stateDir}){
    if(req.method==='POST'&&req.headers['x-qingye-request']!=='1')throw fail('无效请求标记',403);
    if(req.method==='GET'&&route==='/'){
     if(url.pathname===PREFIX){res.writeHead(302,{Location:PREFIX+'/'});res.end();return;}
-    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.10').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
+    let html=await fs.readFile(path.join(project,'src/toolbox.html'),'utf8');html=html.replace("connect-src 'none'","connect-src 'self'").replace('<link rel="stylesheet" href="toolbox.css">','<link rel="stylesheet" href="toolbox.css"><link rel="stylesheet" href="nas.css">').replace('版本 1.1.1 · 支持 MCP','飞牛独立版 1.2.11').replaceAll('组件与 AI','组件与目录').replace('按需安装 · 离线转换','独立应用 · 本机转换').replace('让 AI 调用轻页','飞牛授权目录').replace('先授权文件夹，再将下方 MCP 配置加入支持本地 MCP 的 AI 客户端。无需额外安装 Node。','目录权限由飞牛应用设置管理。修改授权后请停止并重新启动轻页。').replace('仅处理授权目录中的文件，结果另存。普通网页聊天不会自动连接本地应用。','首版限飞牛管理员使用。只显示已授权目录，结果另存，原文件保留。').replace('按需安装组件','内置转换组件').replace('PDF 和图片功能已内置。音视频、办公文档组件安装一次后，可断网使用。','PDF、图片、音视频及办公转换组件随应用提供，无需另装。').replace('选择文件</button>','选择 NAS 文件</button>');
     // Deliver one hash-authorized classic script with the document. No module MIME or relative script URL dependency.
     const script=await fs.readFile(path.join(project,'fnos/web/app.bundle.js'),'utf8');
     const hash=createHash('sha256').update(script).digest('base64');
     const policy=basePolicy.replace("script-src 'self'",`script-src 'self' 'sha256-${hash}'`);
     html=html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,'')
      .replace('<script type="module" src="toolbox-ui.mjs"></script>',()=>'<script>'+script+'</script>')
-     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.10"`)
+     .replace(/href="(styles\.css|toolbox\.css|nas\.css)"/g,(_,name)=>`href="${PREFIX}/${name}?v=1.2.11"`)
      .replace('<div id="message" role="status" aria-live="polite"></div>','<div id="message" role="status" aria-live="polite">界面正在加载；如菜单不能切换，请刷新页面。</div>');
     res.setHeader('Content-Security-Policy',policy);
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);return;
    }
    const asset=assets[route.slice(1)];if(req.method==='GET'&&asset){let data=await fs.readFile(path.join(project,asset));if(asset.endsWith('toolbox-ui.mjs'))data=Buffer.from(data.toString().replaceAll('组件与 AI','组件与目录'));res.writeHead(200,{'Content-Type':asset.endsWith('.css')?'text/css':'text/javascript','Cache-Control':'no-cache'});res.end(data);return;}
-   if(req.method==='GET'&&route==='/api/settings'){json(res,{roots:allowed,components:await componentStatus(),config:{json:''},user:{uid,name:req.headers['x-trim-username']||uid},sharedDirectory:inboxRoot});return;}
+   if(req.method==='GET'&&route==='/api/settings'){json(res,{roots:allowed,components:await componentStatus(),config:{json:JSON.stringify({mcp:{servers:{qingye:{url:'http://127.0.0.1:32180/mcp',transport:'streamable-http',enabled:true}}}},null,2)},user:{uid,name:req.headers['x-trim-username']||uid},sharedDirectory:inboxRoot});return;}
    if(req.method==='GET'&&route==='/api/list'){
     const requested=url.searchParams.get('path');if(!requested){json(res,{path:null,parent:null,entries:allowed.map(p=>({path:p,name:p,directory:true}))});return;}
     const dir=await location(requested);if(!(await fs.stat(dir)).isDirectory())throw fail('不是文件夹');const entries=[];
@@ -103,12 +104,12 @@ export async function createApplication({roots,share,stateDir}){
   }catch(e){if(!res.headersSent&&!res.destroyed)json(res,{error:e.code==='EACCES'?'目录无权限，请在飞牛应用设置中授权':e.code==='ENOENT'?'文件或目录不存在':e.message},e.status||400);else res.destroy();}
  });
  async function close(){closing=true;const stopped=new Promise(resolve=>server.close(resolve));server.closeIdleConnections();if(jobs.active){const id=jobs.active;const done=new Promise(resolve=>{const listener=j=>{if(j.id===id&&j.status!=='running'){jobs.off('update',listener);resolve();}};jobs.on('update',listener);});jobs.cancel(id);await done;}server.closeAllConnections();await stopped;}
- return {server,jobs,close};
+ return {server,jobs,authorize,roots:allowed,close};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const rootList=[...(process.env.TRIM_DATA_SHARE_PATHS||'').split(':'),...(process.env.TRIM_DATA_ACCESSIBLE_PATHS||'').split(':')].filter(Boolean),share=(process.env.TRIM_DATA_SHARE_PATHS||'').split(':').find(Boolean);
  if(!share)throw Error('飞牛共享目录尚未创建');
- const app=await createApplication({roots:rootList,share,stateDir:process.env.TRIM_PKGVAR}),socket=path.join(process.env.TRIM_APPDEST,'app.sock');
- await fs.unlink(socket).catch(e=>{if(e.code!=='ENOENT')throw e;});app.server.listen(socket,async()=>{await fs.chmod(socket,0o660);console.log('Qingye fnOS ready');});app.server.on('error',e=>{console.error(e.message);process.exitCode=1;});
- for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{app.close().then(()=>fs.unlink(socket).catch(()=>{})).then(()=>process.exit(0)).catch(()=>process.exit(1));});
+ const app=await createApplication({roots:rootList,share,stateDir:process.env.TRIM_PKGVAR}),socket=path.join(process.env.TRIM_APPDEST,'app.sock'),mcp=createLocalMcpServer({jobs:app.jobs,authorize:app.authorize,roots:app.roots});
+ await fs.unlink(socket).catch(e=>{if(e.code!=='ENOENT')throw e;});await new Promise((resolve,reject)=>mcp.once('error',reject).listen(32180,'127.0.0.1',resolve));app.server.listen(socket,async()=>{await fs.chmod(socket,0o660);console.log('Qingye fnOS ready; local MCP http://127.0.0.1:32180/mcp');});app.server.on('error',e=>{console.error(e.message);process.exitCode=1;});
+ for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{new Promise(resolve=>mcp.close(resolve)).then(()=>app.close()).then(()=>fs.unlink(socket).catch(()=>{})).then(()=>process.exit(0)).catch(()=>process.exit(1));});
 }

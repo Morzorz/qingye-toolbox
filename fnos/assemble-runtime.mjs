@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 const target='/payload';await fs.mkdir(target,{recursive:true});
 for(const name of ['src','assets','node_modules','LICENSE','THIRD-PARTY-NOTICES.md','package.json'])await fs.cp('/work/'+name,target+'/'+name,{recursive:true,verbatimSymlinks:true});
 for(const name of ['sharp-libvips-linuxmusl-x64','sharp-linuxmusl-x64','sharp-wasm32'])await fs.rm(target+'/node_modules/@img/'+name,{recursive:true,force:true});
-await fs.mkdir(target+'/fnos/web',{recursive:true});await fs.copyFile('/work/fnos/server.mjs',target+'/fnos/server.mjs');await fs.cp('/work/fnos/web',target+'/fnos/web',{recursive:true});
+await fs.mkdir(target+'/fnos/web',{recursive:true});for(const name of ['server.mjs','local-mcp.mjs'])await fs.copyFile('/work/fnos/'+name,target+'/fnos/'+name);await fs.cp('/work/fnos/web',target+'/fnos/web',{recursive:true});
 const rt=target+'/runtime';await fs.mkdir(rt+'/lib',{recursive:true});await fs.mkdir(rt+'/native');await fs.mkdir(rt+'/bin');
 // Debian includes dangling links to optional example configuration; omit only missing link targets.
 const existingTarget=async source=>{try{await fs.stat(source);return true;}catch(e){if(e.code==='ENOENT'&&(await fs.lstat(source)).isSymbolicLink()){console.log('Omit optional dangling link: '+source);return false;}throw e;}};
