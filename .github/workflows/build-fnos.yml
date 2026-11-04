@@ -33,6 +33,8 @@ jobs:
         run: npm ci
 
       - name: 构建 Linux 运行文件（Docker payload）
+        env:
+          DOCKER_BUILDKIT: '1'
         run: |
           docker build --platform linux/amd64 \
             -f fnos/Dockerfile --target payload \
