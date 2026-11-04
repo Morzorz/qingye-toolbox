@@ -1,1 +1,1 @@
-{".url":{"qingye.main":{"title":"轻页文件工具箱","icon":"images/icon_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/qingye","gatewaySocket":"app.sock","url":"/app/qingye/","allUsers":false,"control":{"accessPerm":"readonly"}}}}
+{".url":{"qingye.main":{"title":"轻页文件工具箱","icon":"images/icon_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/qingye","gatewaySocket":"app.sock","url":"/app/qingye","allUsers":false,"control":{"accessPerm":"readonly"}}}}

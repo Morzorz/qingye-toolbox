@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>轻页文件工具箱 · 飞牛独立版</title>
+<link rel="stylesheet" href="styles.css?v=1.2.13.5">
+<link rel="stylesheet" href="app.css?v=1.2.13.5">
+<script defer src="app.js?v=1.2.13.5"></script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brandmark" aria-hidden="true">↘</span><div class="brand-text">轻页<span>FILE TOOLBOX</span></div></div>
+  <nav id="nav" aria-label="工具分组">
+    <button type="button" class="nav-item is-active" data-group="pdf">▤　PDF 工具</button>
+    <button type="button" class="nav-item" data-group="office">▦　办公文档</button>
+    <button type="button" class="nav-item" data-group="image">▧　图片处理</button>
+    <button type="button" class="nav-item" data-group="audio">♫　音频转换</button>
+    <button type="button" class="nav-item" data-group="video">▷　视频转换</button>
+    <button type="button" class="nav-item" data-group="settings">⚙　组件与目录</button>
+  </nav>
+  <div class="sidebar-foot">
+    <div class="local-line"><span class="local-dot" aria-hidden="true"></span>文件在 NAS 本机处理</div>
+    <p>独立应用 · 目录授权由飞牛管理</p>
+    <small id="sidebar-version">飞牛独立版</small>
+  </div>
+</aside>
+<main id="main">
+  <header class="topbar">
+    <div class="topbar-copy">
+      <div class="eyebrow">文件处理，一处完成</div>
+      <h1 id="title">PDF 工具</h1>
+      <p id="subtitle">压缩、合并与格式转换，保留你的原文件。</p>
+    </div>
+    <span class="badge" id="version-badge">飞牛独立版</span>
+  </header>
+
+  <section class="panel" id="work-panel" aria-label="文件处理">
+    <div class="operation-row">
+      <label for="operation">处理方式</label>
+      <select id="operation"></select>
+      <span id="operation-note"></span>
+    </div>
+
+    <section class="dropzone" id="dropzone" tabindex="0" aria-label="添加或拖入文件">
+      <span class="upload-icon" aria-hidden="true">＋</span>
+      <div class="dropzone-copy">
+        <strong>把文件拖到这里</strong>
+        <p id="formats">PDF 文件 · 每批最多 100 个文件</p>
+      </div>
+      <div class="dropzone-actions">
+        <button type="button" id="pick-nas" class="secondary">从 NAS 上选择</button>
+        <button type="button" id="upload-pc" class="secondary">上传电脑文件</button>
+      </div>
+      <input type="file" id="file-input" multiple hidden>
+    </section>
+
+    <section class="settings" aria-label="处理设置">
+      <div class="presets" role="radiogroup" aria-label="处理质量">
+        <label class="preset"><input type="radio" name="preset" value="clear"><span class="preset-body"><strong>清晰优先</strong><span>保留更多细节</span></span></label>
+        <label class="preset selected"><input type="radio" name="preset" value="balanced" checked><span class="preset-body"><strong>均衡 <em>推荐</em></strong><span>兼顾清晰与大小</span></span></label>
+        <label class="preset"><input type="radio" name="preset" value="small"><span class="preset-body"><strong>体积优先</strong><span>有损压缩更明显</span></span></label>
+      </div>
+      <div id="options" class="options"></div>
+      <div class="folder-row">
+        <span class="folder-label">保存到</span>
+        <span id="folder" class="folder-path" title="">与第一个文件相同的文件夹</span>
+        <button type="button" id="folder-pick" class="link">更改</button>
+        <button type="button" id="folder-reset" class="link" hidden>恢复默认</button>
+      </div>
+    </section>
+
+    <section class="queue" aria-label="文件列表">
+      <div class="queue-head">
+        <div class="section-title">文件列表 <span id="count">0 个文件</span></div>
+        <button type="button" id="clear" class="link" disabled>清空列表</button>
+      </div>
+      <div id="empty" class="queue-empty"><span aria-hidden="true">▤</span><p>添加文件后，在这里查看处理结果</p></div>
+      <div id="files" class="file-list"></div>
+    </section>
+
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+
+    <footer class="footer">
+      <div class="footer-copy"><strong id="summary">准备好，开始处理文件</strong><p id="hint">结果另存，原文件始终保留。</p></div>
+      <button type="button" id="cancel" class="secondary" hidden>取消任务</button>
+      <button type="button" id="start" class="primary" disabled>开始处理 →</button>
+    </footer>
+  </section>
+
+  <section class="panel panel-scroll" id="settings-panel" hidden aria-label="组件与目录">
+    <section class="card">
+      <h2>授权目录</h2>
+      <p>轻页以独立应用账号运行，只读取飞牛明确授权给轻页的目录；在下方点「重新授权」后立即生效，无需重启应用。</p>
+      <div class="roots-heading">
+        <strong>应用可访问的目录</strong>
+        <button type="button" id="open-settings" class="secondary">打开应用设置</button>
+      </div>
+      <div id="roots" class="roots"></div>
+      <div id="missing-roots" class="warn-list" hidden></div>
+      <p class="small-note" id="settings-note" role="status"></p>
+    </section>
+    <section class="card">
+      <h2>转换组件</h2>
+      <p>转换组件随应用提供，无需单独下载安装；缺少组件时任务会给出明确提示。</p>
+      <div id="components" class="components"></div>
+    </section>
+    <section class="card">
+      <h2>任务历史</h2>
+      <p>保存最近 100 个任务，按飞牛账号隔离；可按原参数重试。</p>
+      <div id="history" class="history"></div>
+    </section>
+  </section>
+</main>
+</body>
+</html>

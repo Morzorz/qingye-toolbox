@@ -1,2 +1,2 @@
 import './bridge.js';
-import '../../src/toolbox-ui.mjs';
+import './app.mjs';

@@ -1,1 +1,1 @@
-{"defaults":{"run-as":"package"},"username":"qingye","groupname":"qingye"}
+{"defaults":{"run-as":"package"},"username":"qingye","groupname":"qingye","join-groups":["video","render"]}

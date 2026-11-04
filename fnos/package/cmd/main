@@ -14,7 +14,11 @@ case "${1:-}" in
  start)
   if alive; then exit 0; fi
   mkdir -p "$TRIM_PKGVAR"
-  [ -n "${TRIM_DATA_SHARE_PATHS:-}" ] || fail '未创建共享目录，请检查应用安装状态'
+  # 共享目录可能通过 TRIM_DATA_SHARE_PATHS 提供，也可能是 /var/apps/<appname>/share/<子目录> 软链。
+  # 这里不硬失败，交给应用自行探测后给出明确错误。
+  if [ -z "${TRIM_DATA_SHARE_PATHS:-}" ]; then
+   printf '%s\n' "共享目录未通过 TRIM_DATA_SHARE_PATHS 提供，将由应用探测 /var/apps/${TRIM_APPNAME:-qingye}/share/files" >&2
+  fi
   export QINGYE_DATA_DIR="$TRIM_PKGVAR"
   export QINGYE_FFMPEG="$TRIM_APPDEST/runtime/bin/ffmpeg"
   export QINGYE_SOFFICE="$TRIM_APPDEST/runtime/bin/soffice"

@@ -18,6 +18,16 @@ for(const entry of await fs.readdir('/usr/lib/x86_64-linux-gnu',{withFileTypes:t
  }
 }
 // Include indirect libraries stored in private subdirectories (for example PulseAudio).
+// VA-API user-space GPU drivers live in dri/; copy them so runtime can set LIBVA_DRIVERS_PATH.
+if(await fs.access('/usr/lib/x86_64-linux-gnu/dri').then(()=>true,()=>false)){
+ await fs.mkdir(rt+'/lib/dri',{recursive:true});
+ for(const entry of await fs.readdir('/usr/lib/x86_64-linux-gnu/dri')){
+  if(!/\.so(?:\.|$)/.test(entry))continue;
+  const source='/usr/lib/x86_64-linux-gnu/dri/'+entry;
+  await fs.copyFile(await fs.realpath(source),rt+'/lib/dri/'+path.basename(await fs.realpath(source)));
+ }
+}
+const vaapiRuntime=await fs.access(rt+'/lib/dri').then(()=>true,()=>false);
 for(const binary of ['/usr/local/bin/node','/usr/bin/ffmpeg','/usr/lib/libreoffice/program/soffice.bin']){
  const listing=execFileSync('ldd',[binary],{encoding:'utf8'});
  if(listing.includes('not found'))throw Error('Unresolved native dependency: '+listing);
@@ -32,7 +42,8 @@ await fs.writeFile(fundamental,(await fs.readFile(fundamental,'utf8')).replaceAl
 await fs.copyFile('/etc/libreoffice/sofficerc',rt+'/libreoffice/program/sofficerc');
 await fs.mkdir(rt+'/fonts',{recursive:true});await fs.cp('/usr/share/fonts/truetype/dejavu',rt+'/fonts/dejavu',{recursive:true});await fs.copyFile('/work/assets/fonts/NotoSansSC-Regular.otf',rt+'/fonts/NotoSansSC-Regular.otf');
 for(const [name,exe] of [['node','native/node'],['ffmpeg','native/ffmpeg'],['soffice','libreoffice/program/soffice.bin']]){
- const wrapper=`#!/bin/sh\nset -eu\nrt=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\n${name==='soffice'?'export FONTCONFIG_FILE="$rt/fonts.conf"\nexport URE_BOOTSTRAP="vnd.sun.star.pathname:$rt/libreoffice/program/fundamentalrc"\n':''}exec "$rt/lib/ld-linux-x86-64.so.2" --library-path "$rt/libreoffice/program:$rt/lib" "$rt/${exe}" "$@"\n`;
+ const prelude=name==='soffice'?'export FONTCONFIG_FILE="$rt/fonts.conf"\nexport URE_BOOTSTRAP="vnd.sun.star.pathname:$rt/libreoffice/program/fundamentalrc"\n':name==='ffmpeg'&&vaapiRuntime?'export LIBVA_DRIVERS_PATH="$rt/lib/dri"\n':'';
+const wrapper=`#!/bin/sh\nset -eu\nrt=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\n${prelude}exec "$rt/lib/ld-linux-x86-64.so.2" --library-path "$rt/libreoffice/program:$rt/lib" "$rt/${exe}" "$@"\n`;
  const command='\"$rt/lib/ld-linux-x86-64.so.2\" --library-path \"$rt/libreoffice/program:$rt/lib\" \"$rt/'+exe+'\" \"$@\"';
  const script=name==='soffice'?wrapper.replace('exec '+command+'\n','for attempt in 1 2 3; do\n if '+command+'; then exit 0; else status=$?; fi\n [ \"$status\" = 81 ] || exit \"$status\"\ndone\nexit 81\n'):wrapper;
  await fs.writeFile(rt+'/bin/'+name,script,{mode:0o755});

@@ -1,14 +1,15 @@
 appname=qingye
-version=1.2.11
+version=1.2.13.5
 display_name=轻页文件工具箱
 desc=独立运行的 PDF、图片、办公文档与音视频转换工具。文件在 NAS 本机处理，保留原文件。首版限管理员使用。
 platform=x86
 source=thirdparty
 maintainer=Qingye contributors
-os_min_version=1.2.0
+os_min_version=1.2.0401
+micro_app=true
 ctl_stop=true
 checkport=false
 desktop_uidir=ui
 desktop_applaunchname=qingye.main
 disable_authorization_path=false
-changelog=修复飞牛页面菜单和下拉选项加载兼容性；界面脚本随页面交付，增加启动错误提示。
+changelog=新增《API 接口文档》（docs/fnos-api.md）；任务校验失败统一返回 400 JOB_REJECTED（不再 500）；硬件加速为 CPU 解码缩放 + GPU 编码；本机回环 Web 入口默认开启（QINGYE_WEB=0 关闭）。

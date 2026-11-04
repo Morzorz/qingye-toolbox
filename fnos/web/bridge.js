@@ -1,20 +1,226 @@
-(()=>{
- const base='/app/qingye',listeners=new Set();let current=null,timer;
- const request=async(route,body)=>{const r=await fetch(base+'/api/'+route,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-Qingye-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(v.error||'请求失败');return v;};
- function dialog(title){const d=document.createElement('dialog');d.className='nas-dialog';const h=document.createElement('h2');h.textContent=title;const content=document.createElement('div');content.className='nas-dialog-content';const bar=document.createElement('div');bar.className='nas-dialog-actions';const cancel=document.createElement('button');cancel.textContent='关闭';cancel.className='secondary';cancel.onclick=()=>d.close();bar.append(cancel);d.append(h,content,bar);document.body.append(d);d.addEventListener('close',()=>d.remove(),{once:true});d.showModal();return {d,content,bar};}
- function choose(folderOnly=false){return new Promise(resolve=>{const {d,content,bar}=dialog(folderOnly?'选择 NAS 保存文件夹':'选择 NAS 文件'),selected=new Set();let listing;const note=document.createElement('p');note.className='note';note.textContent='仅显示飞牛已授权的目录。更改目录授权后，请重启应用。';const address=document.createElement('input');address.placeholder='输入授权目录内的完整路径';address.setAttribute('aria-label','NAS 目录路径');const go=document.createElement('button');go.textContent='打开目录';go.className='secondary';const home=document.createElement('button');home.textContent='授权目录';home.className='link';const up=document.createElement('button');up.textContent='上一级';up.className='link';const list=document.createElement('div');list.className='nas-browser';const error=document.createElement('p');error.className='error';content.append(note,address,go,home,up,list,error);const confirm=document.createElement('button');confirm.className='primary';confirm.textContent=folderOnly?'保存到此文件夹':'添加所选文件';bar.append(confirm);
- const load=async p=>{try{listing=await request('list'+(p?'?path='+encodeURIComponent(p):''));address.value=listing.path||'';up.disabled=!listing.parent;confirm.disabled=folderOnly&&!listing.path;list.replaceChildren();error.textContent='';for(const item of listing.entries){const row=document.createElement('label');row.className='nas-entry';if(item.directory){const button=document.createElement('button');button.className='link';button.textContent='📁 '+item.name;button.setAttribute('aria-label','打开文件夹 '+item.name);button.onclick=()=>load(item.path);row.append(button);}else if(!folderOnly){const check=document.createElement('input');check.type='checkbox';check.checked=selected.has(item.path);check.onchange=()=>{if(check.checked)selected.add(item.path);else selected.delete(item.path);};const name=document.createElement('span');name.textContent=item.name;row.append(check,name);}else continue;list.append(row);}if(!list.children.length)list.textContent='此目录没有可选择的项目';}catch(e){error.textContent=e.message;}};
- go.onclick=()=>load(address.value);address.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();load(address.value);}};home.onclick=()=>load(null);up.onclick=()=>load(listing?.parent);confirm.onclick=()=>{const result=folderOnly?listing?.path:[...selected];if(folderOnly&&!result)return;resolve(result);d.close();};d.addEventListener('close',()=>resolve(folderOnly?null:[]),{once:true});load(null);
- });}
- async function uploadOne(file,operation){const id=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),message=document.getElementById('message');let started=false;const call=async(route,body,raw=false)=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);try{const r=await fetch(base+'/api/'+route,{method:'POST',headers:raw?{'Content-Type':'application/octet-stream','X-Qingye-Request':'1'}:{'Content-Type':'application/json','X-Qingye-Request':'1'},body:raw?body:JSON.stringify(body),signal:controller.signal});const data=await r.json();if(!r.ok)throw Error(data.error||'上传失败 ('+r.status+')');return data;}finally{clearTimeout(timer);}};try{const startedUpload=await call('upload-start',{id,operation,name:file.name,size:file.size});started=true;const chunkSize=startedUpload.chunkSize;for(let offset=0;offset<file.size;offset+=chunkSize){const chunk=file.slice(offset,Math.min(offset+chunkSize,file.size)),data=await call('upload-chunk?id='+encodeURIComponent(id),chunk,true);const percent=Math.floor(data.received/file.size*100);message.textContent='正在上传 '+file.name+'… '+percent+'%';}message.textContent='文件已收到，正在保存到共享目录…';return await call('upload-finish',{id});}catch(e){if(started)request('upload-cancel',{id}).catch(()=>{});if(e.name==='AbortError')throw Error('某个上传分块超过 60 秒未收到 NAS 确认，请检查应用状态后重试');throw e;}}
- async function upload(files,operation){if(files.length>100)throw Error('每批最多上传 100 个文件');const added=[],errors=[];for(const file of files){try{const data=await uploadOne(file,operation);added.push(...data.added);}catch(e){errors.push(file.name+'：'+e.message);}}return {added,errors};}
- async function poll(){if(!current)return;try{const j=await request('job?id='+encodeURIComponent(current.id));current=j;for(const cb of listeners)cb(j);if(j.status==='running')timer=setTimeout(poll,700);}catch(e){document.getElementById('message').textContent=e.message;timer=setTimeout(poll,3000);}}
- window.qingye={
-  pickFiles:async operation=>request('select',{paths:await choose(),operation}),dropFiles:upload,pickFolder:()=>choose(true),
-  start:async r=>{clearTimeout(timer);const started=await request('jobs',r);current={id:started.jobId};timer=setTimeout(poll,200);return started;},status:id=>request('job?id='+encodeURIComponent(id)),cancel:id=>request('cancel',{id}),onEvent:cb=>listeners.add(cb),
-  reveal:async p=>{if(!current)return;const j=await request('job?id='+encodeURIComponent(current.id));const result=j.results.find(r=>r.outputs.includes(p));if(!result)throw Error('任务输出不存在');const {content}=dialog('处理结果');for(const file of result.outputs){const row=document.createElement('div');row.className='nas-result';const label=document.createElement('p');label.textContent=file;const link=document.createElement('a');link.className='link';link.textContent='下载到电脑';link.href=base+'/api/download?id='+encodeURIComponent(j.id)+'&path='+encodeURIComponent(file);link.download='';row.append(label,link);content.append(row);}},
-  settings:async()=>{const s=await request('settings');document.querySelector('.roots-heading strong').textContent='应用可访问的 NAS 目录';return s;},addRoot:async()=>{throw Error('请在飞牛应用设置中授权目录，然后重启轻页');},removeRoot:async()=>{throw Error('请在飞牛应用设置中管理授权');},copyConfig:async()=>{},installComponent:async()=>{},selectComponent:async()=>{},cancelDownload:async()=>{},onComponent:()=>{}
- };
- const uploadButton=document.createElement('button');uploadButton.className='secondary';uploadButton.textContent='上传电脑文件';uploadButton.id='nas-upload';const picker=document.createElement('input');picker.type='file';picker.multiple=true;picker.hidden=true;const stop=e=>e.stopPropagation();for(const type of ['pointerdown','mousedown','click']){uploadButton.addEventListener(type,stop);picker.addEventListener(type,stop);}uploadButton.onclick=()=>{if(!document.getElementById('cancel').hidden)return;picker.click();};picker.onchange=async()=>{try{const dt=new DataTransfer();for(const f of picker.files)dt.items.add(f);document.getElementById('dropzone').dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));}finally{picker.value='';}};document.getElementById('dropzone').append(uploadButton,picker);
- document.querySelector('[data-group=settings]').textContent='⚙　组件与目录';
-})();
+import {TrimApp} from '@trimjs/web-app';
+
+/**
+ * 飞牛版 API 适配层。
+ *
+ * 只暴露 UI 真正需要的方法：
+ *  - 目录与文件：list / select / folder / permission
+ *  - 上传：upload（分片，带进度）
+ *  - 任务：start / status / cancel / onEvent / history / retry / downloadUrl
+ *  - 宿主：settings / openAppSetting
+ *
+ * 约定：
+ *  - 所有请求走 `/app/qingye/api/...`；POST 必须带 `X-Qingye-Request: 1`。
+ *  - 失败时抛出 Error，`message` 取后端 `body.error`，并挂载：
+ *      error.status   HTTP 状态码
+ *      error.code     后端错误码（如 `NO_READ` / `TOO_MANY`）
+ *      error.hints    后端可执行的中文步骤（可能为空数组）
+ */
+const PREFIX = '/app/qingye';
+const MARKER = 'X-Qingye-Request';
+
+let hostCache;
+
+function host() {
+  if (hostCache === undefined) {
+    try {
+      hostCache = new TrimApp({});
+    } catch (error) {
+      hostCache = null;
+      if (window.console) console.warn('[轻页] 飞牛宿主接口不可用：' + error.message);
+    }
+  }
+  return hostCache;
+}
+
+function failure(payload, status) {
+  const error = new Error(payload?.error || `请求失败（HTTP ${status}）`);
+  error.status = status;
+  error.code = payload?.code || null;
+  error.hints = Array.isArray(payload?.hints) ? payload.hints.filter((hint) => typeof hint === 'string' && hint.trim()) : [];
+  return error;
+}
+
+async function parse(response) {
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { error: text.slice(0, 300) || `请求失败（HTTP ${response.status}）` };
+    }
+  }
+  if (!response.ok || payload.error) throw failure(payload, response.status);
+  return payload;
+}
+
+async function request(route, body) {
+  const url = `${PREFIX}/api/${route}`;
+  const init = body === undefined
+    ? { method: 'GET', headers: {} }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json', [MARKER]: '1' }, body: JSON.stringify(body) };
+  return parse(await fetch(url, init));
+}
+
+async function postRaw(route, blob) {
+  const response = await fetch(`${PREFIX}/api/${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', [MARKER]: '1' },
+    body: blob,
+  });
+  return parse(response);
+}
+
+function query(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') search.set(key, String(value));
+  }
+  const text = search.toString();
+  return text ? `?${text}` : '';
+}
+
+async function uploadOne(file, operation, onProgress) {
+  const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`).replace(/-/g, '').slice(0, 40);
+  let started = false;
+  try {
+    const session = await request('upload-start', { id, operation, name: file.name, size: file.size });
+    started = true;
+    const chunkSize = Number(session.chunkSize) || 512 * 1024;
+    for (let offset = 0; offset < file.size; offset += chunkSize) {
+      const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
+      const data = await postRaw(`upload-chunk?id=${encodeURIComponent(id)}`, chunk);
+      const percent = Math.min(100, Math.floor((Number(data.received) || offset + chunk.size) / file.size * 100));
+      onProgress?.(`正在上传 ${file.name}… ${percent}%`, percent);
+    }
+    onProgress?.(`文件已收到，正在保存 ${file.name}…`, 100);
+    return await request('upload-finish', { id });
+  } catch (error) {
+    if (started) request('upload-cancel', { id }).catch(() => {});
+    throw error;
+  }
+}
+
+async function upload(files, operation, options = {}) {
+  if (!files?.length) return { added: [], errors: [] };
+  if (files.length > 100) throw new Error('每批最多上传 100 个文件');
+  const added = [];
+  const errors = [];
+  for (const file of files) {
+    try {
+      const data = await uploadOne(file, operation, options.onProgress);
+      added.push(...(data.added || []));
+    } catch (error) {
+      errors.push(`${file.name}：${error.message}`);
+      if (Array.isArray(error.hints)) options.onHints?.(error.hints);
+    }
+  }
+  return { added, errors };
+}
+
+let active = null;
+let timer = null;
+const listeners = new Set();
+
+function emit(job) {
+  active = job;
+  for (const listener of listeners) {
+    try {
+      listener(job);
+    } catch (error) {
+      if (window.console) console.error(error);
+    }
+  }
+}
+
+async function poll() {
+  if (!active) return;
+  try {
+    emit(await request(`job?id=${encodeURIComponent(active.id)}`));
+    if (active.status === 'running') timer = setTimeout(poll, 700);
+  } catch (error) {
+    timer = setTimeout(poll, 3000);
+    for (const listener of listeners) {
+      try {
+        listener({ ...active, pollError: error.message });
+      } catch {}
+    }
+  }
+}
+
+async function openAppSetting() {
+  const instance = host();
+  if (!instance) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页');
+  if (instance.isStandaloneWeb) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页');
+  await instance.openAppSetting();
+}
+
+/**
+ * 重新授权一个目录：走飞牛官方 `authorizeSharedFile`。
+ * 官方文档写 `data: string[]`，0.5.0 的 .d.ts 写 `boolean`，两种都兼容。
+ * 非管理员/未在飞牛桌面打开时 `code !== 0`，直接抛出宿主的 `msg`。
+ */
+async function authorizeFolder(path) {
+  const instance = host();
+  if (!instance) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页后再授权目录');
+  if (instance.isStandaloneWeb) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页后再授权目录');
+  if (!path) throw new Error('请先进入要授权的文件夹');
+  const result = await instance.authorizeSharedFile(path);
+  if (!result) throw new Error('已取消授权');
+  if (result.code !== 0) throw new Error(result.msg || '授权未完成');
+  const paths = Array.isArray(result.data) ? result.data : [];
+  return { code: result.code, msg: result.msg || '', paths };
+}
+
+/**
+ * 在飞牛文件管理器中定位一个路径（例如权限有问题的文件，用户需要去改属主/权限）。
+ * 不在飞牛桌面里、或宿主版本不支持时只抛出可读提示，由调用方展示在面板里。
+ */
+async function openFileManager(target) {
+  const instance = host();
+  if (!instance) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页');
+  if (instance.isStandaloneWeb) throw new Error('当前页面不在飞牛桌面中，请从飞牛桌面打开轻页');
+  if (!target) throw new Error('没有可打开的路径');
+  if (typeof instance.openFileManager !== 'function') throw new Error('当前飞牛版本不支持从页面打开文件管理器，请手动打开「文件管理器」定位该路径');
+  await instance.openFileManager(target);
+}
+
+function hostState() {
+  const instance = host();
+  if (!instance) return { available: false, standalone: true };
+  return { available: true, standalone: Boolean(instance.isStandaloneWeb) };
+}
+
+window.qingye = {
+  settings: () => request('settings'),
+  list: (path, operation) => request(`nas/list${query({ path, operation })}`),
+  select: (paths, operation) => request('nas/select', { paths, operation }),
+  folder: (folder, operation) => request('nas/folder', { folder, operation }),
+  permission: (path, mode = 'r') => request('nas/permission', { path, mode }),
+  grant: (path) => request('nas/grant', { path }),
+  authorizeFolder,
+  openFileManager,
+  hostState,
+  upload,
+  start: async (payload) => {
+    clearTimeout(timer);
+    const started = await request('jobs', payload);
+    active = { id: started.jobId, status: 'running', percent: 0, stage: '已提交' };
+    timer = setTimeout(poll, 150);
+    return started;
+  },
+  status: (id) => request(`job?id=${encodeURIComponent(id)}`),
+  cancel: (id) => {
+    clearTimeout(timer);
+    return request('cancel', { id });
+  },
+  history: () => request('history'),
+  retry: (id) => request('retry', { id }),
+  onEvent: (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
+  downloadUrl: (id, path) => `${PREFIX}/api/download${query({ id, path })}`,
+  openAppSetting,
+};
