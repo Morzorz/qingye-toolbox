@@ -87,7 +87,7 @@ async function wait(id,headers){
 const listOf=async(p,operation='pdf_compress')=>req(`/api/nas/list?path=${encodeURIComponent(p)}&operation=${operation}`);
 
 test('startup tolerates a missing authorized root and still starts',async()=>{
- assert.equal(VERSION,'1.2.13.5');
+ assert.equal(VERSION,'1.2.14.0');
  assert.deepEqual(app.roots,[realShare]);
  assert.deepEqual(app.missingRoots,[gone]);
  const log=await fs.readFile(path.join(state,'app.log'),'utf8');
@@ -100,7 +100,7 @@ test('settings reports roots, shared directory and missing roots',async()=>{
  const response=await req('/api/settings');
  assert.equal(response.status,200,response.raw.toString());
  const body=response.body;
- assert.equal(body.version,'1.2.13.5');
+ assert.equal(body.version,'1.2.14.0');
  assert.equal(body.label,'飞牛独立版');
  assert.equal(body.roots.length,1);
  assert.deepEqual(Object.keys(body.roots[0]).sort(),['name','path','shared','writable']);
@@ -163,13 +163,14 @@ test('page comes from fnos/web/index.html with a self-only CSP',async()=>{
 test('static assets map to the fnos and desktop bundles',async()=>{
  const bundle=path.join(project,'fnos/web/app.bundle.js');
  const bundleExists=await fs.access(bundle).then(()=>true,()=>false);
- const js=await req('/app.js?v=1.2.13.5');
+ const js=await req('/app.js?v=1.2.14.0');
  assert.equal(js.status,bundleExists?200:404);
  if(bundleExists){assert.equal(js.headers['content-type'],'text/javascript; charset=utf-8');assert(js.raw.length>0);}
  else assert.equal(js.body.code,'ASSET_MISSING');
- const css=await req('/app.css?v=1.2.13.5');
- const cssExists=await fs.access(path.join(project,'fnos/web/app.css')).then(()=>true,()=>false);
- assert(cssExists,'缺少 fnos/web/app.css：前端成员尚未交付飞牛版样式');
+ const css=await req('/app.css?v=1.2.14.0');
+ // 共用 UI 把样式迁到了 src/ui/app.css（docs/desktop-ui-unification.md §1），服务端也从这个路径下发。
+ const cssExists=await fs.access(path.join(project,'src/ui/app.css')).then(()=>true,()=>false);
+ assert(cssExists,'缺少 src/ui/app.css：共用 UI 样式未就绪');
  assert.equal(css.status,200);
  assert.equal(css.headers['content-type'],'text/css; charset=utf-8');
  const styles=await req('/styles.css');

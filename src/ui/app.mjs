@@ -1,4 +1,4 @@
-import { OPERATIONS, validateOptions } from '../../src/catalog.mjs';
+import { OPERATIONS, validateOptions } from '../catalog.mjs';
 
 /**
  * 轻页文件工具箱 · 飞牛独立版 UI（1.2.13）
@@ -12,6 +12,53 @@ import { OPERATIONS, validateOptions } from '../../src/catalog.mjs';
 
 const $ = (id) => document.getElementById(id);
 const api = window.qingye;
+
+/* ---------------------------------------------------------------- 宿主适配 */
+
+/**
+ * 两端共用这一份 UI：飞牛（fnos）与 Electron 桌面（desktop）。
+ * `window.qingye.host` 由适配层给出；老版本适配层没有该字段时按能力探测。
+ */
+function detectHost() {
+  if (api?.host === 'fnos' || api?.host === 'desktop') return api.host;
+  if (typeof api?.list === 'function' || typeof api?.permission === 'function') return 'fnos';
+  if (typeof api?.pickFolderBatch === 'function' || typeof api?.addRoot === 'function') return 'desktop';
+  return typeof api?.upload === 'function' ? 'fnos' : 'desktop';
+}
+
+const HOST = detectHost();
+const DESKTOP = HOST === 'desktop';
+
+/**
+ * 能力表：优先用适配层自报的 `capabilities`；缺失时按 host 给默认值，
+ * 这样任意一端先升级都不会白屏。
+ */
+const CAPABILITIES = {
+  nas: !DESKTOP,
+  upload: !DESKTOP,
+  pickFiles: DESKTOP,
+  pickFolder: DESKTOP,
+  pickFolderBatch: DESKTOP,
+  dropFiles: true,
+  reveal: true,
+  downloadUrl: !DESKTOP,
+  history: true,
+  retry: true,
+  editableRoots: DESKTOP,
+  mcpConfig: DESKTOP,
+  installComponents: DESKTOP,
+  hardware: true,
+  openAppSetting: !DESKTOP,
+  openFileManager: !DESKTOP,
+  ...(api?.capabilities && typeof api.capabilities === 'object' ? api.capabilities : {}),
+};
+const can = (name) => Boolean(CAPABILITIES[name]);
+const VERSION_FALLBACK = '1.2.14.0';
+const HOST_LABEL = { fnos: '飞牛独立版', desktop: '桌面版' };
+const SOURCE_LABEL = { nas: 'NAS', pc: '电脑上传', desktop: '本机' };
+
+/** 桌面端没有 NAS 弹窗：所有 NAS 专属入口都靠这个开关统一隐藏。 */
+const NAS = can('nas');
 
 const GROUPS = {
   pdf: { label: 'PDF 工具', subtitle: '压缩、合并与格式转换，保留你的原文件。' },
@@ -161,10 +208,52 @@ function element(tag, className, text) {
 
 function applySettings(settings) {
   state.settings = settings;
-  const version = [settings?.label, settings?.version].filter(Boolean).join(' ') || '飞牛独立版 1.2.13.5';
-  $('version-badge').textContent = version;
-  $('sidebar-version').textContent = version;
+  // 版本角标统一读 settings.version（桌面端由 app.getVersion() 提供）。
+  const version = settings?.version || VERSION_FALLBACK;
+  const label = settings?.label || HOST_LABEL[HOST] || '轻页';
+  const badge = `${label} ${version}`;
+  $('version-badge').textContent = badge;
+  $('sidebar-version').textContent = badge;
+  applyHostChrome();
   renderFolder();
+}
+
+/** 按宿主切换界面文案（按钮、侧栏说明）。ID 两端保持一致，只改可见文字。 */
+function applyHostChrome() {
+  const pick = $('pick-nas');
+  const upload = $('upload-pc');
+  if (pick) {
+    pick.textContent = NAS ? '从 NAS 上选择' : '选择文件';
+    pick.title = NAS ? '在已授权的 NAS 目录中选择文件或整个文件夹' : '从本机选择要处理的文件（可多选）';
+  }
+  if (upload) {
+    upload.textContent = NAS ? '上传电脑文件' : '选择文件夹';
+    upload.title = NAS ? '把本机文件上传到 NAS 共享目录后处理' : '选择本机文件夹，按其扩展名递归加入文件（最多 100 个）';
+  }
+  const local = $('sidebar-local');
+  if (local) local.textContent = NAS ? '文件在 NAS 本机处理' : '文件在本机处理';
+  const note = $('sidebar-note');
+  if (note) note.textContent = NAS ? '独立应用 · 目录授权由飞牛管理' : '本地处理 · 离线转换';
+  const openSettings = $('open-settings');
+  if (openSettings) openSettings.hidden = !NAS;
+  const rootsLabel = $('roots-heading-label');
+  if (rootsLabel) rootsLabel.hidden = !NAS;
+  const rootsTitle = $('roots-title');
+  if (rootsTitle) rootsTitle.textContent = NAS ? '授权目录' : 'AI 授权目录';
+  const rootsDesc = $('roots-desc');
+  if (rootsDesc) {
+    rootsDesc.textContent = NAS
+      ? '轻页以独立应用账号运行，只读取飞牛明确授权给轻页的目录；在下方点「重新授权」后立即生效，无需重启应用。'
+      : 'AI 只能读取下面这些文件夹，结果另存；增删授权后立即生效。';
+  }
+  const componentsTitle = $('components-title');
+  if (componentsTitle) componentsTitle.textContent = NAS ? '转换组件' : '转换组件';
+  const componentsDesc = $('components-desc');
+  if (componentsDesc) {
+    componentsDesc.textContent = NAS
+      ? '转换组件随应用提供，无需单独下载安装；缺少组件时任务会给出明确提示。'
+      : 'PDF 与图片功能已内置。音视频、办公文档组件安装一次后即可离线使用。';
+  }
 }
 
 async function ensureSettings() {
@@ -211,6 +300,7 @@ function mergeResult(result, extra = {}) {
   state.job = null;
   render();
   if (errors.length) setMessage(errors.join('\n'), 'error');
+  else if (added && DESKTOP) setMessage(`已加入 ${added} 个文件`, 'info');
   else if (added) setMessage('', '');
   return { added, errors };
 }
@@ -251,8 +341,10 @@ function renderQueue() {
     const name = element('div', 'file-name', file.name);
     name.title = file.path;
     const meta = element('div', 'file-meta');
-    const source = element('span', `source-tag ${file.source === 'pc' ? 'is-pc' : 'is-nas'}`,
-      `${file.source === 'pc' ? '电脑上传' : 'NAS'} · ${relativePath(file.path)}`);
+    const sourceKind = file.source === 'pc' ? 'pc' : file.source === 'desktop' ? 'desktop' : 'nas';
+    // 桌面端没有授权根：「来源」显示文件名（批量加入时是相对所选文件夹的路径），完整路径放 title。
+    const sourcePath = sourceKind === 'desktop' ? file.name : relativePath(file.path);
+    const source = element('span', `source-tag is-${sourceKind}`, `${SOURCE_LABEL[sourceKind]} · ${sourcePath}`);
     source.title = file.path;
     meta.append(source, element('span', 'dot', '·'), element('span', 'size', formatSize(file.size)));
     if (file.mtime) meta.append(element('span', 'dot', '·'), element('span', 'mtime', formatTime(file.mtime)));
@@ -342,10 +434,27 @@ function showResultDialog(file) {
     const label = element('div', 'result-name', baseName(output));
     label.title = output;
     info.append(label, element('div', 'result-path', relativePath(output)));
-    const link = element('a', 'link', '下载到电脑');
-    link.href = api.downloadUrl(job?.id, output);
-    link.setAttribute('download', '');
-    row.append(info, link);
+    if (can('downloadUrl') && typeof api.downloadUrl === 'function') {
+      const link = element('a', 'link', '下载到电脑');
+      link.href = api.downloadUrl(job?.id, output);
+      link.setAttribute('download', '');
+      row.append(info, link);
+    } else {
+      // 桌面端没有 HTTP 端点：直接在文件管理器里定位结果。
+      const reveal = element('button', 'link', '打开位置');
+      reveal.type = 'button';
+      reveal.onclick = async () => {
+        reveal.disabled = true;
+        try {
+          await api.reveal(output);
+        } catch (error) {
+          setMessage(error.message, 'error');
+        } finally {
+          reveal.disabled = false;
+        }
+      };
+      row.append(info, reveal);
+    }
     list.append(row);
   }
   body.append(list);
@@ -1247,6 +1356,10 @@ function settingsButton(row, note) {
 }
 
 function renderRoots(roots = [], missingRoots = []) {
+  if (!NAS) {
+    renderAiRoots(roots);
+    return;
+  }
   const box = $('roots');
   box.replaceChildren();
   if (!roots.length) {
@@ -1346,6 +1459,109 @@ function renderRoots(roots = [], missingRoots = []) {
 }
 
 /**
+ * 桌面端「AI 授权目录」：可增删，删除即撤销授权。
+ * 增删后重新拉 /api/settings，立即生效（桌面端没有 NAS 的授权弹窗）。
+ */
+function renderAiRoots(roots = []) {
+  const box = $('roots');
+  box.replaceChildren();
+  const warn = $('missing-roots');
+  if (warn) {
+    warn.replaceChildren();
+    warn.hidden = true;
+  }
+  const heading = element('div', 'roots-heading');
+  const add = element('button', 'secondary', '添加授权文件夹');
+  add.type = 'button';
+  add.id = 'add-root';
+  add.onclick = async () => {
+    add.disabled = true;
+    try {
+      await api.addRoot();
+      await reloadSettings();
+    } catch (error) {
+      setSettingsNote(error.message, true);
+    } finally {
+      add.disabled = false;
+    }
+  };
+  heading.append(element('strong', '', 'AI 可读写的文件夹'), add);
+  box.append(heading);
+  if (!roots.length) {
+    box.append(element('p', 'roots-empty', '尚未授权任何文件夹，AI 无法读写文件。'));
+    return;
+  }
+  for (const root of roots) {
+    const value = typeof root === 'string' ? root : root?.path;
+    if (!value) continue;
+    const row = element('div', 'root-row');
+    const info = element('div', 'root-info');
+    const pathNode = element('span', 'root-path', value);
+    pathNode.title = value;
+    info.append(pathNode);
+    const remove = element('button', 'link', '撤销');
+    remove.type = 'button';
+    remove.onclick = async () => {
+      remove.disabled = true;
+      try {
+        await api.removeRoot(value);
+        await reloadSettings();
+      } catch (error) {
+        setSettingsNote(error.message, true);
+      } finally {
+        remove.disabled = false;
+      }
+    };
+    row.append(info, remove);
+    box.append(row);
+  }
+}
+
+/** 桌面端 MCP 配置卡片（飞牛端没有这个能力，卡片根本不会创建）。 */
+function renderMcpCard(settings) {
+  if (!can('mcpConfig')) return;
+  const panel = $('settings-panel');
+  let card = $('card-mcp');
+  if (!card) {
+    card = element('section', 'card');
+    card.id = 'card-mcp';
+    const title = element('h2', '', '让 AI 调用轻页');
+    const desc = element('p', '', '先在上面授权文件夹，再把下面配置加入支持本地 MCP 的 AI 客户端；无需额外安装 Node。');
+    const actions = element('div', 'config-actions');
+    const copyJson = element('button', 'secondary', '复制通用 MCP 配置');
+    copyJson.type = 'button';
+    copyJson.id = 'copy-json';
+    const copyToml = element('button', 'secondary', '复制 Codex 配置');
+    copyToml.type = 'button';
+    copyToml.id = 'copy-toml';
+    const note = element('p', 'small-note', '');
+    note.id = 'mcp-note';
+    copyJson.onclick = () => copyConfig('json', note);
+    copyToml.onclick = () => copyConfig('toml', note);
+    actions.append(copyJson, copyToml);
+    const textarea = document.createElement('textarea');
+    textarea.id = 'mcp-config';
+    textarea.readOnly = true;
+    textarea.setAttribute('aria-label', 'MCP 配置');
+    card.append(title, desc, actions, textarea, note);
+    // 放在「AI 授权目录」之后、「转换组件」之前
+    const components = $('components')?.closest('.card');
+    panel.insertBefore(card, components || null);
+  }
+  const textarea = $('mcp-config');
+  if (textarea) textarea.value = settings?.config?.json || settings?.config?.toml || '';
+}
+
+async function copyConfig(kind, note) {
+  try {
+    await api.copyConfig(kind);
+    if (note) note.textContent = '配置已复制，请在 AI 客户端添加本地 MCP 服务。';
+  } catch (error) {
+    if (note) note.textContent = `复制失败：${error.message}`;
+  }
+}
+
+/**
  * 契约 §2.8：`/api/settings.hardware` → `视频硬件加速：可用（VAAPI · /dev/dri/renderD128）`。
  * 字段做容错；没有 hardware 字段就整行不渲染。文案完全由后端数值决定，前端不推断能力。
  */
@@ -1369,10 +1585,53 @@ function renderComponents(components = {}, hardware = null, webInfo = null) {
     ['media', '音视频组件 · FFmpeg', components.media],
     ['office', '办公组件 · LibreOffice', components.office],
   ];
-  for (const [, label, value] of rows) {
-    const row = element('div', 'component-row');
-    row.append(element('strong', '', label), element('span', `component-state ${value ? 'is-ok' : 'is-bad'}`, value ? `已就绪：${value}` : '未安装或未检测到'));
-    box.append(row);
+  // 飞牛端组件随应用提供：只读展示；桌面端可安装/可选择，走下面那组交互行。
+  if (!can('installComponents')) {
+    for (const [, label, value] of rows) {
+      const row = element('div', 'component-row');
+      row.append(element('strong', '', label), element('span', `component-state ${value ? 'is-ok' : 'is-bad'}`, value ? `已就绪：${value}` : '未安装或未检测到'));
+      box.append(row);
+    }
+  }
+  if (can('installComponents')) {
+    // 桌面端：组件按需下载安装，或指向已有的可执行文件。
+    for (const [kind, label, value] of [
+      ['media', '音视频组件 · FFmpeg', components.media],
+      ['office', '办公组件 · LibreOffice', components.office],
+    ]) {
+      const row = element('div', 'component-row component-actions-row');
+      const info = element('div', 'component-info');
+      info.append(element('strong', '', label), element('p', 'small-note', value ? `已就绪：${value}` : '未安装或未检测到'));
+      const install = element('button', 'secondary', '下载安装');
+      install.type = 'button';
+      install.dataset.install = kind;
+      install.disabled = Boolean(value);
+      install.onclick = () => installComponent(kind, install);
+      const pick = element('button', 'link', '选择已有组件');
+      pick.type = 'button';
+      pick.dataset.select = kind;
+      pick.onclick = () => selectComponent(kind, pick);
+      row.append(info, install, pick);
+      box.append(row);
+    }
+    const actions = element('div', 'component-actions');
+    const cancel = element('button', 'link', '取消下载');
+    cancel.type = 'button';
+    cancel.id = 'cancel-download';
+    cancel.hidden = true;
+    cancel.onclick = async () => {
+      try {
+        await api.cancelDownload();
+        setSettingsNote('已请求取消下载。');
+      } catch (error) {
+        setSettingsNote(error.message, true);
+      }
+    };
+    const status = element('span', 'small-note', '');
+    status.id = 'download-status';
+    status.setAttribute('role', 'status');
+    actions.append(cancel, status);
+    box.append(actions);
   }
   const hw = hardwareLine(hardware);
   if (hw) {
@@ -1420,6 +1679,8 @@ function renderHistory(jobs = []) {
     const label = OPERATIONS[job.operation]?.label || job.operation;
     info.append(element('strong', '', `${label} · ${job.results?.filter((result) => result.status === 'done').length || 0} 个成功`));
     info.append(element('span', 'history-meta', `${formatMoment(job.createdAt)} · ${JOB_STATUS[job.status] || '已结束'}`));
+    // 历史任务的输出不在「本次运行」白名单内，桌面端 reveal 会被拒（安全设计），
+    // 所以历史条目只展示路径文本 + 重试，不提供「打开位置」。
     const outputs = (job.results || []).flatMap((result) => result.outputs || []);
     info.append(element('span', 'history-path', outputs.length ? outputs.map((path) => relativePath(path)).join('、') : (job.stage || '无输出')));
     const retry = element('button', 'secondary', '按原参数重试');
@@ -1448,7 +1709,50 @@ function setSettingsNote(text, isError = false) {
   node.classList.toggle('is-error', isError);
 }
 
+/** 桌面端：下载安装组件（进度通过 api.onComponent 推到 #download-status）。 */
+async function installComponent(kind, button) {
+  const all = [...document.querySelectorAll('[data-install],[data-select]')];
+  const cancel = $('cancel-download');
+  all.forEach((node) => { node.disabled = true; });
+  if (cancel) cancel.hidden = false;
+  try {
+    const result = await api.installComponent(kind);
+    setSettingsNote(result?.message || '组件安装完成。');
+  } catch (error) {
+    setSettingsNote(`安装失败：${error.message}`, true);
+  } finally {
+    all.forEach((node) => { node.disabled = false; });
+    if (cancel) cancel.hidden = true;
+    await reloadSettings();
+  }
+  return button;
+}
+
+/** 桌面端：把组件指向已有的可执行文件。 */
+async function selectComponent(kind, button) {
+  button.disabled = true;
+  try {
+    await api.selectComponent(kind);
+    await reloadSettings();
+  } catch (error) {
+    setSettingsNote(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/** 重新读取设置并重绘设置页（授权目录增删、组件安装后调用）。 */
+async function reloadSettings() {
+  state.settings = null;
+  const settings = await ensureSettings();
+  if (!settings) return;
+  renderRoots(settings.roots || [], settings.missingRoots || []);
+  renderComponents(settings.components || {}, settings.hardware ?? null, settings.web ?? null);
+  renderMcpCard(settings);
+}
+
 async function loadHistory() {
+  if (!can('history') || typeof api.history !== 'function') return;
   try {
     renderHistory(await api.history());
   } catch (error) {
@@ -1458,11 +1762,7 @@ async function loadHistory() {
 
 async function loadSettingsPage() {
   setSettingsNote('');
-  const settings = await ensureSettings();
-  if (settings) {
-    renderRoots(settings.roots || [], settings.missingRoots || []);
-    renderComponents(settings.components || {}, settings.hardware ?? null, settings.web ?? null);
-  }
+  await reloadSettings();
   await loadHistory();
 }
 
@@ -1488,18 +1788,46 @@ function bind() {
     };
   });
 
+  // 主按钮：飞牛走 NAS 选择弹窗，桌面走原生多选对话框（ID 两端一致）。
   $('pick-nas').onclick = async (event) => {
     event.stopPropagation();
-    if (state.busy) return;
+    if (state.busy || state.uploading) return;
+    if (!NAS) {
+      try {
+        mergeResult(await api.pickFiles(state.operation), { source: 'desktop' });
+      } catch (error) {
+        setMessage(error.message, 'error');
+      }
+      return;
+    }
     const result = await openNasPicker({ mode: 'files', operation: state.operation });
     if (!result) return;
     mergeResult(result, { source: 'nas' });
   };
 
-  $('upload-pc').onclick = (event) => {
+  // 次按钮：飞牛「上传电脑文件」，桌面「选择文件夹」（按扩展名递归加入）。
+  $('upload-pc').onclick = async (event) => {
     event.stopPropagation();
-    if (state.busy) return;
-    $('file-input').click();
+    if (state.busy || state.uploading) return;
+    if (NAS) {
+      $('file-input').click();
+      return;
+    }
+    if (!can('pickFolderBatch') || typeof api.pickFolderBatch !== 'function') {
+      setMessage('当前版本不支持选择文件夹，请改用「选择文件」或拖拽。', 'error');
+      return;
+    }
+    state.uploading = true;
+    render();
+    setMessage('正在扫描所选文件夹…', 'info');
+    try {
+      mergeResult(await api.pickFolderBatch(state.operation), { source: 'desktop' });
+    } catch (error) {
+      setMessage(error.message, 'error');
+    } finally {
+      state.uploading = false;
+      render();
+    }
   };
   $('file-input').onchange = async (event) => {
     const files = [...(event.target.files || [])];
@@ -1525,7 +1853,17 @@ function bind() {
     $('dropzone').classList.remove('is-drag');
     if (state.busy || state.uploading) return;
     const files = [...(event.dataTransfer?.files || [])];
-    if (files.length) await uploadLocal(files);
+    if (!files.length) return;
+    if (NAS) {
+      await uploadLocal(files);
+      return;
+    }
+    // 桌面端：直接把拖入的文件交给主进程校验并加入队列（不经过上传）。
+    try {
+      mergeResult(await api.dropFiles(event.dataTransfer.files, state.operation), { source: 'desktop' });
+    } catch (error) {
+      setMessage(error.message, 'error');
+    }
   });
 
   $('clear').onclick = () => {
@@ -1536,6 +1874,17 @@ function bind() {
   };
   $('folder-pick').onclick = async () => {
     if (state.busy) return;
+    if (!NAS) {
+      try {
+        const picked = await api.pickFolder?.();
+        if (!picked) return;
+        state.outputDir = typeof picked === 'string' ? picked : picked.path;
+        renderFolder();
+      } catch (error) {
+        setMessage(error.message, 'error');
+      }
+      return;
+    }
     const result = await openNasPicker({ mode: 'output', operation: state.operation });
     if (!result?.folder) return;
     state.outputDir = result.folder;
@@ -1547,14 +1896,22 @@ function bind() {
   };
   $('start').onclick = startJob;
   $('cancel').onclick = cancelJob;
-  $('open-settings').onclick = async () => {
+  $('open-settings')?.addEventListener('click', async () => {
     try {
       await api.openAppSetting();
       setSettingsNote('已尝试打开飞牛应用设置。');
     } catch (error) {
       setSettingsNote(`无法自动打开应用设置：${error.message}。请手动进入「应用中心 → 轻页 → 应用设置」。`, true);
     }
-  };
+  });
+
+  // 桌面端：组件下载进度事件（飞牛端组件随应用提供，没有这个通道）。
+  if (can('installComponents') && typeof api.onComponent === 'function') {
+    api.onComponent((progress) => {
+      const node = $('download-status');
+      if (node) node.textContent = progress?.stage || progress?.message || '';
+    });
+  }
 
   api.onEvent((job) => {
     if (!job?.id) return;
@@ -1569,6 +1926,8 @@ function bind() {
 
 async function boot() {
   bind();
+  // 立刻按宿主切换文案，避免桌面端先闪一下 NAS 按钮再变。
+  applyHostChrome();
   // 先取一次 /api/settings：版本角标、默认保存位置、授权根都来自这里。
   await ensureSettings();
   buildOptions();

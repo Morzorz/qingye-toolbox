@@ -193,6 +193,26 @@ function hostState() {
 }
 
 window.qingye = {
+  // 宿主标识 + 能力表：共用 UI 靠这两个字段切换按钮文案与设置页分块。
+  host: 'fnos',
+  capabilities: {
+    nas: true,
+    upload: true,
+    pickFiles: false,
+    pickFolder: false,
+    pickFolderBatch: false,
+    dropFiles: true,
+    reveal: true,
+    downloadUrl: true,
+    history: true,
+    retry: true,
+    editableRoots: false,
+    mcpConfig: false,
+    installComponents: false,
+    hardware: true,
+    openAppSetting: true,
+    openFileManager: true,
+  },
   settings: () => request('settings'),
   list: (path, operation) => request(`nas/list${query({ path, operation })}`),
   select: (paths, operation) => request('nas/select', { paths, operation }),

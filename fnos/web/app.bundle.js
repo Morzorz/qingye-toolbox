@@ -1586,6 +1586,26 @@ try {
     return { available: true, standalone: Boolean(instance.isStandaloneWeb) };
   }
   window.qingye = {
+    // 宿主标识 + 能力表：共用 UI 靠这两个字段切换按钮文案与设置页分块。
+    host: "fnos",
+    capabilities: {
+      nas: true,
+      upload: true,
+      pickFiles: false,
+      pickFolder: false,
+      pickFolderBatch: false,
+      dropFiles: true,
+      reveal: true,
+      downloadUrl: true,
+      history: true,
+      retry: true,
+      editableRoots: false,
+      mcpConfig: false,
+      installComponents: false,
+      hardware: true,
+      openAppSetting: true,
+      openFileManager: true
+    },
     settings: () => request("settings"),
     list: (path, operation) => request(`nas/list${query({ path, operation })}`),
     select: (paths, operation) => request("nas/select", { paths, operation }),
@@ -1669,9 +1689,41 @@ try {
     return result;
   }
 
-  // fnos/web/app.mjs
+  // src/ui/app.mjs
   var $2 = (id) => document.getElementById(id);
   var api = window.qingye;
+  function detectHost() {
+    if (api?.host === "fnos" || api?.host === "desktop") return api.host;
+    if (typeof api?.list === "function" || typeof api?.permission === "function") return "fnos";
+    if (typeof api?.pickFolderBatch === "function" || typeof api?.addRoot === "function") return "desktop";
+    return typeof api?.upload === "function" ? "fnos" : "desktop";
+  }
+  var HOST = detectHost();
+  var DESKTOP = HOST === "desktop";
+  var CAPABILITIES = {
+    nas: !DESKTOP,
+    upload: !DESKTOP,
+    pickFiles: DESKTOP,
+    pickFolder: DESKTOP,
+    pickFolderBatch: DESKTOP,
+    dropFiles: true,
+    reveal: true,
+    downloadUrl: !DESKTOP,
+    history: true,
+    retry: true,
+    editableRoots: DESKTOP,
+    mcpConfig: DESKTOP,
+    installComponents: DESKTOP,
+    hardware: true,
+    openAppSetting: !DESKTOP,
+    openFileManager: !DESKTOP,
+    ...api?.capabilities && typeof api.capabilities === "object" ? api.capabilities : {}
+  };
+  var can = (name) => Boolean(CAPABILITIES[name]);
+  var VERSION_FALLBACK = "1.2.14.0";
+  var HOST_LABEL = { fnos: "飞牛独立版", desktop: "桌面版" };
+  var SOURCE_LABEL = { nas: "NAS", pc: "电脑上传", desktop: "本机" };
+  var NAS = can("nas");
   var GROUPS = {
     pdf: { label: "PDF 工具", subtitle: "压缩、合并与格式转换，保留你的原文件。" },
     office: { label: "办公文档", subtitle: "Word / Excel / PPT 转 PDF，排版以本机字体为准。" },
@@ -1795,10 +1847,45 @@ try {
   }
   function applySettings(settings) {
     state.settings = settings;
-    const version = [settings?.label, settings?.version].filter(Boolean).join(" ") || "飞牛独立版 1.2.13.5";
-    $2("version-badge").textContent = version;
-    $2("sidebar-version").textContent = version;
+    const version = settings?.version || VERSION_FALLBACK;
+    const label = settings?.label || HOST_LABEL[HOST] || "轻页";
+    const badge = `${label} ${version}`;
+    $2("version-badge").textContent = badge;
+    $2("sidebar-version").textContent = badge;
+    applyHostChrome();
     renderFolder();
+  }
+  function applyHostChrome() {
+    const pick = $2("pick-nas");
+    const upload2 = $2("upload-pc");
+    if (pick) {
+      pick.textContent = NAS ? "从 NAS 上选择" : "选择文件";
+      pick.title = NAS ? "在已授权的 NAS 目录中选择文件或整个文件夹" : "从本机选择要处理的文件（可多选）";
+    }
+    if (upload2) {
+      upload2.textContent = NAS ? "上传电脑文件" : "选择文件夹";
+      upload2.title = NAS ? "把本机文件上传到 NAS 共享目录后处理" : "选择本机文件夹，按其扩展名递归加入文件（最多 100 个）";
+    }
+    const local = $2("sidebar-local");
+    if (local) local.textContent = NAS ? "文件在 NAS 本机处理" : "文件在本机处理";
+    const note = $2("sidebar-note");
+    if (note) note.textContent = NAS ? "独立应用 · 目录授权由飞牛管理" : "本地处理 · 离线转换";
+    const openSettings = $2("open-settings");
+    if (openSettings) openSettings.hidden = !NAS;
+    const rootsLabel = $2("roots-heading-label");
+    if (rootsLabel) rootsLabel.hidden = !NAS;
+    const rootsTitle = $2("roots-title");
+    if (rootsTitle) rootsTitle.textContent = NAS ? "授权目录" : "AI 授权目录";
+    const rootsDesc = $2("roots-desc");
+    if (rootsDesc) {
+      rootsDesc.textContent = NAS ? "轻页以独立应用账号运行，只读取飞牛明确授权给轻页的目录；在下方点「重新授权」后立即生效，无需重启应用。" : "AI 只能读取下面这些文件夹，结果另存；增删授权后立即生效。";
+    }
+    const componentsTitle = $2("components-title");
+    if (componentsTitle) componentsTitle.textContent = NAS ? "转换组件" : "转换组件";
+    const componentsDesc = $2("components-desc");
+    if (componentsDesc) {
+      componentsDesc.textContent = NAS ? "转换组件随应用提供，无需单独下载安装；缺少组件时任务会给出明确提示。" : "PDF 与图片功能已内置。音视频、办公文档组件安装一次后即可离线使用。";
+    }
   }
   async function ensureSettings() {
     if (state.settings) return state.settings;
@@ -1840,6 +1927,7 @@ try {
     state.job = null;
     render();
     if (errors.length) setMessage(errors.join("\n"), "error");
+    else if (added && DESKTOP) setMessage(`已加入 ${added} 个文件`, "info");
     else if (added) setMessage("", "");
     return { added, errors };
   }
@@ -1874,11 +1962,9 @@ try {
       const name = element("div", "file-name", file.name);
       name.title = file.path;
       const meta = element("div", "file-meta");
-      const source = element(
-        "span",
-        `source-tag ${file.source === "pc" ? "is-pc" : "is-nas"}`,
-        `${file.source === "pc" ? "电脑上传" : "NAS"} · ${relativePath(file.path)}`
-      );
+      const sourceKind = file.source === "pc" ? "pc" : file.source === "desktop" ? "desktop" : "nas";
+      const sourcePath = sourceKind === "desktop" ? file.name : relativePath(file.path);
+      const source = element("span", `source-tag is-${sourceKind}`, `${SOURCE_LABEL[sourceKind]} · ${sourcePath}`);
       source.title = file.path;
       meta.append(source, element("span", "dot", "·"), element("span", "size", formatSize(file.size)));
       if (file.mtime) meta.append(element("span", "dot", "·"), element("span", "mtime", formatTime(file.mtime)));
@@ -1961,10 +2047,26 @@ try {
       const label = element("div", "result-name", baseName(output));
       label.title = output;
       info.append(label, element("div", "result-path", relativePath(output)));
-      const link = element("a", "link", "下载到电脑");
-      link.href = api.downloadUrl(job?.id, output);
-      link.setAttribute("download", "");
-      row.append(info, link);
+      if (can("downloadUrl") && typeof api.downloadUrl === "function") {
+        const link = element("a", "link", "下载到电脑");
+        link.href = api.downloadUrl(job?.id, output);
+        link.setAttribute("download", "");
+        row.append(info, link);
+      } else {
+        const reveal = element("button", "link", "打开位置");
+        reveal.type = "button";
+        reveal.onclick = async () => {
+          reveal.disabled = true;
+          try {
+            await api.reveal(output);
+          } catch (error) {
+            setMessage(error.message, "error");
+          } finally {
+            reveal.disabled = false;
+          }
+        };
+        row.append(info, reveal);
+      }
       list.append(row);
     }
     body.append(list);
@@ -2756,6 +2858,10 @@ try {
     return link;
   }
   function renderRoots(roots = [], missingRoots = []) {
+    if (!NAS) {
+      renderAiRoots(roots);
+      return;
+    }
     const box = $2("roots");
     box.replaceChildren();
     if (!roots.length) {
@@ -2851,6 +2957,100 @@ try {
       warn.hidden = true;
     }
   }
+  function renderAiRoots(roots = []) {
+    const box = $2("roots");
+    box.replaceChildren();
+    const warn = $2("missing-roots");
+    if (warn) {
+      warn.replaceChildren();
+      warn.hidden = true;
+    }
+    const heading = element("div", "roots-heading");
+    const add = element("button", "secondary", "添加授权文件夹");
+    add.type = "button";
+    add.id = "add-root";
+    add.onclick = async () => {
+      add.disabled = true;
+      try {
+        await api.addRoot();
+        await reloadSettings();
+      } catch (error) {
+        setSettingsNote(error.message, true);
+      } finally {
+        add.disabled = false;
+      }
+    };
+    heading.append(element("strong", "", "AI 可读写的文件夹"), add);
+    box.append(heading);
+    if (!roots.length) {
+      box.append(element("p", "roots-empty", "尚未授权任何文件夹，AI 无法读写文件。"));
+      return;
+    }
+    for (const root of roots) {
+      const value = typeof root === "string" ? root : root?.path;
+      if (!value) continue;
+      const row = element("div", "root-row");
+      const info = element("div", "root-info");
+      const pathNode = element("span", "root-path", value);
+      pathNode.title = value;
+      info.append(pathNode);
+      const remove = element("button", "link", "撤销");
+      remove.type = "button";
+      remove.onclick = async () => {
+        remove.disabled = true;
+        try {
+          await api.removeRoot(value);
+          await reloadSettings();
+        } catch (error) {
+          setSettingsNote(error.message, true);
+        } finally {
+          remove.disabled = false;
+        }
+      };
+      row.append(info, remove);
+      box.append(row);
+    }
+  }
+  function renderMcpCard(settings) {
+    if (!can("mcpConfig")) return;
+    const panel = $2("settings-panel");
+    let card = $2("card-mcp");
+    if (!card) {
+      card = element("section", "card");
+      card.id = "card-mcp";
+      const title = element("h2", "", "让 AI 调用轻页");
+      const desc = element("p", "", "先在上面授权文件夹，再把下面配置加入支持本地 MCP 的 AI 客户端；无需额外安装 Node。");
+      const actions = element("div", "config-actions");
+      const copyJson = element("button", "secondary", "复制通用 MCP 配置");
+      copyJson.type = "button";
+      copyJson.id = "copy-json";
+      const copyToml = element("button", "secondary", "复制 Codex 配置");
+      copyToml.type = "button";
+      copyToml.id = "copy-toml";
+      const note = element("p", "small-note", "");
+      note.id = "mcp-note";
+      copyJson.onclick = () => copyConfig("json", note);
+      copyToml.onclick = () => copyConfig("toml", note);
+      actions.append(copyJson, copyToml);
+      const textarea2 = document.createElement("textarea");
+      textarea2.id = "mcp-config";
+      textarea2.readOnly = true;
+      textarea2.setAttribute("aria-label", "MCP 配置");
+      card.append(title, desc, actions, textarea2, note);
+      const components = $2("components")?.closest(".card");
+      panel.insertBefore(card, components || null);
+    }
+    const textarea = $2("mcp-config");
+    if (textarea) textarea.value = settings?.config?.json || settings?.config?.toml || "";
+  }
+  async function copyConfig(kind, note) {
+    try {
+      await api.copyConfig(kind);
+      if (note) note.textContent = "配置已复制，请在 AI 客户端添加本地 MCP 服务。";
+    } catch (error) {
+      if (note) note.textContent = `复制失败：${error.message}`;
+    }
+  }
   function hardwareLine(hardware) {
     if (!hardware || typeof hardware !== "object") return null;
     const available = hardware.available ?? hardware.ok ?? hardware.enabled;
@@ -2870,10 +3070,51 @@ try {
       ["media", "音视频组件 · FFmpeg", components.media],
       ["office", "办公组件 · LibreOffice", components.office]
     ];
-    for (const [, label, value] of rows) {
-      const row = element("div", "component-row");
-      row.append(element("strong", "", label), element("span", `component-state ${value ? "is-ok" : "is-bad"}`, value ? `已就绪：${value}` : "未安装或未检测到"));
-      box.append(row);
+    if (!can("installComponents")) {
+      for (const [, label, value] of rows) {
+        const row = element("div", "component-row");
+        row.append(element("strong", "", label), element("span", `component-state ${value ? "is-ok" : "is-bad"}`, value ? `已就绪：${value}` : "未安装或未检测到"));
+        box.append(row);
+      }
+    }
+    if (can("installComponents")) {
+      for (const [kind, label, value] of [
+        ["media", "音视频组件 · FFmpeg", components.media],
+        ["office", "办公组件 · LibreOffice", components.office]
+      ]) {
+        const row = element("div", "component-row component-actions-row");
+        const info = element("div", "component-info");
+        info.append(element("strong", "", label), element("p", "small-note", value ? `已就绪：${value}` : "未安装或未检测到"));
+        const install = element("button", "secondary", "下载安装");
+        install.type = "button";
+        install.dataset.install = kind;
+        install.disabled = Boolean(value);
+        install.onclick = () => installComponent(kind, install);
+        const pick = element("button", "link", "选择已有组件");
+        pick.type = "button";
+        pick.dataset.select = kind;
+        pick.onclick = () => selectComponent(kind, pick);
+        row.append(info, install, pick);
+        box.append(row);
+      }
+      const actions = element("div", "component-actions");
+      const cancel = element("button", "link", "取消下载");
+      cancel.type = "button";
+      cancel.id = "cancel-download";
+      cancel.hidden = true;
+      cancel.onclick = async () => {
+        try {
+          await api.cancelDownload();
+          setSettingsNote("已请求取消下载。");
+        } catch (error) {
+          setSettingsNote(error.message, true);
+        }
+      };
+      const status = element("span", "small-note", "");
+      status.id = "download-status";
+      status.setAttribute("role", "status");
+      actions.append(cancel, status);
+      box.append(actions);
     }
     const hw = hardwareLine(hardware);
     if (hw) {
@@ -2939,7 +3180,48 @@ try {
     node.textContent = text || "";
     node.classList.toggle("is-error", isError);
   }
+  async function installComponent(kind, button) {
+    const all = [...document.querySelectorAll("[data-install],[data-select]")];
+    const cancel = $2("cancel-download");
+    all.forEach((node) => {
+      node.disabled = true;
+    });
+    if (cancel) cancel.hidden = false;
+    try {
+      const result = await api.installComponent(kind);
+      setSettingsNote(result?.message || "组件安装完成。");
+    } catch (error) {
+      setSettingsNote(`安装失败：${error.message}`, true);
+    } finally {
+      all.forEach((node) => {
+        node.disabled = false;
+      });
+      if (cancel) cancel.hidden = true;
+      await reloadSettings();
+    }
+    return button;
+  }
+  async function selectComponent(kind, button) {
+    button.disabled = true;
+    try {
+      await api.selectComponent(kind);
+      await reloadSettings();
+    } catch (error) {
+      setSettingsNote(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+  async function reloadSettings() {
+    state.settings = null;
+    const settings = await ensureSettings();
+    if (!settings) return;
+    renderRoots(settings.roots || [], settings.missingRoots || []);
+    renderComponents(settings.components || {}, settings.hardware ?? null, settings.web ?? null);
+    renderMcpCard(settings);
+  }
   async function loadHistory() {
+    if (!can("history") || typeof api.history !== "function") return;
     try {
       renderHistory(await api.history());
     } catch (error) {
@@ -2948,11 +3230,7 @@ try {
   }
   async function loadSettingsPage() {
     setSettingsNote("");
-    const settings = await ensureSettings();
-    if (settings) {
-      renderRoots(settings.roots || [], settings.missingRoots || []);
-      renderComponents(settings.components || {}, settings.hardware ?? null, settings.web ?? null);
-    }
+    await reloadSettings();
     await loadHistory();
   }
   function bind() {
@@ -2976,15 +3254,41 @@ try {
     });
     $2("pick-nas").onclick = async (event) => {
       event.stopPropagation();
-      if (state.busy) return;
+      if (state.busy || state.uploading) return;
+      if (!NAS) {
+        try {
+          mergeResult(await api.pickFiles(state.operation), { source: "desktop" });
+        } catch (error) {
+          setMessage(error.message, "error");
+        }
+        return;
+      }
       const result = await openNasPicker({ mode: "files", operation: state.operation });
       if (!result) return;
       mergeResult(result, { source: "nas" });
     };
-    $2("upload-pc").onclick = (event) => {
+    $2("upload-pc").onclick = async (event) => {
       event.stopPropagation();
-      if (state.busy) return;
-      $2("file-input").click();
+      if (state.busy || state.uploading) return;
+      if (NAS) {
+        $2("file-input").click();
+        return;
+      }
+      if (!can("pickFolderBatch") || typeof api.pickFolderBatch !== "function") {
+        setMessage("当前版本不支持选择文件夹，请改用「选择文件」或拖拽。", "error");
+        return;
+      }
+      state.uploading = true;
+      render();
+      setMessage("正在扫描所选文件夹…", "info");
+      try {
+        mergeResult(await api.pickFolderBatch(state.operation), { source: "desktop" });
+      } catch (error) {
+        setMessage(error.message, "error");
+      } finally {
+        state.uploading = false;
+        render();
+      }
     };
     $2("file-input").onchange = async (event) => {
       const files = [...event.target.files || []];
@@ -3009,7 +3313,16 @@ try {
       $2("dropzone").classList.remove("is-drag");
       if (state.busy || state.uploading) return;
       const files = [...event.dataTransfer?.files || []];
-      if (files.length) await uploadLocal(files);
+      if (!files.length) return;
+      if (NAS) {
+        await uploadLocal(files);
+        return;
+      }
+      try {
+        mergeResult(await api.dropFiles(event.dataTransfer.files, state.operation), { source: "desktop" });
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
     });
     $2("clear").onclick = () => {
       state.files = [];
@@ -3019,6 +3332,17 @@ try {
     };
     $2("folder-pick").onclick = async () => {
       if (state.busy) return;
+      if (!NAS) {
+        try {
+          const picked = await api.pickFolder?.();
+          if (!picked) return;
+          state.outputDir = typeof picked === "string" ? picked : picked.path;
+          renderFolder();
+        } catch (error) {
+          setMessage(error.message, "error");
+        }
+        return;
+      }
       const result = await openNasPicker({ mode: "output", operation: state.operation });
       if (!result?.folder) return;
       state.outputDir = result.folder;
@@ -3030,14 +3354,20 @@ try {
     };
     $2("start").onclick = startJob;
     $2("cancel").onclick = cancelJob;
-    $2("open-settings").onclick = async () => {
+    $2("open-settings")?.addEventListener("click", async () => {
       try {
         await api.openAppSetting();
         setSettingsNote("已尝试打开飞牛应用设置。");
       } catch (error) {
         setSettingsNote(`无法自动打开应用设置：${error.message}。请手动进入「应用中心 → 轻页 → 应用设置」。`, true);
       }
-    };
+    });
+    if (can("installComponents") && typeof api.onComponent === "function") {
+      api.onComponent((progress) => {
+        const node = $2("download-status");
+        if (node) node.textContent = progress?.stage || progress?.message || "";
+      });
+    }
     api.onEvent((job) => {
       if (!job?.id) return;
       state.job = job;
@@ -3048,6 +3378,7 @@ try {
   }
   async function boot() {
     bind();
+    applyHostChrome();
     await ensureSettings();
     buildOptions();
     render();
