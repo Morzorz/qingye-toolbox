@@ -1523,3 +1523,57 @@ input:focus {
     height: calc(100vh - 24px);
   }
 }
+
+/* ------------------------------------------------- 桌面端（AI 目录 / MCP / 组件安装） */
+
+.config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+#mcp-config {
+  width: 100%;
+  min-height: 168px;
+  resize: vertical;
+  border: 1px solid #e0e8e2;
+  background: #f6f8f6;
+  border-radius: 8px;
+  padding: 11px 12px;
+  font: 11px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #567462;
+}
+
+#mcp-config:focus {
+  outline: 2px solid #8dc4a1;
+  outline-offset: 2px;
+}
+
+.component-actions-row {
+  gap: 10px;
+}
+
+.component-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.component-info small {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.component-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  font-size: 10.5px;
+  color: #6d8175;
+}
+
+#download-status {
+  overflow-wrap: anywhere;
+}

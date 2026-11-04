@@ -1,5 +1,5 @@
 appname=qingye
-version=1.2.13.5
+version=1.2.14.0
 display_name=轻页文件工具箱
 desc=独立运行的 PDF、图片、办公文档与音视频转换工具。文件在 NAS 本机处理，保留原文件。首版限管理员使用。
 platform=x86
@@ -12,4 +12,4 @@ checkport=false
 desktop_uidir=ui
 desktop_applaunchname=qingye.main
 disable_authorization_path=false
-changelog=新增《API 接口文档》（docs/fnos-api.md）；任务校验失败统一返回 400 JOB_REJECTED（不再 500）；硬件加速为 CPU 解码缩放 + GPU 编码；本机回环 Web 入口默认开启（QINGYE_WEB=0 关闭）。
+changelog=桌面端与飞牛端统一到同一套界面（两份入口、共用 src/ui）；桌面端支持选择文件夹批量加入、任务历史与硬件加速状态；版本号统一为 1.2.14.0。

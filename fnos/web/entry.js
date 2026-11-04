@@ -1,2 +1,2 @@
 import './bridge.js';
-import './app.mjs';
+import '../../src/ui/app.mjs';

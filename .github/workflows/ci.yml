@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -77,4 +76,25 @@ jobs:
         with:
           name: fnos-ui-screenshots
           path: artifacts/*.png
+          if-no-files-found: ignore
+
+  desktop-ui:
+    name: 桌面端界面冒烟（Electron + xvfb）
+    runs-on: ubuntu-latest
+    # Electron 在无头 Linux 上依赖 xvfb 与系统库，先作为观测项
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libasound2t64
+      - run: xvfb-run -a node scripts/toolbox-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-ui-screenshots
+          path: artifacts/toolbox-*.png
           if-no-files-found: ignore

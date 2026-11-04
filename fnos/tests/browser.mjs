@@ -106,7 +106,11 @@ try {
   assert.equal(await page.locator('#nas-auth').count(), 0);
   assert.equal(await page.locator('#dropzone').getByText('从 NAS 文件夹批量添加', {exact: true}).count(), 0);
   assert.equal(await page.locator('#dropzone').getByText('选择文件', {exact: true}).count(), 0);
-  assert((await page.locator('#version-badge').textContent()).includes('1.2.13.5'), '版本角标应来自 /api/settings');
+  // 桌面专属元素在飞牛端不出现（共用 UI 按 host=fnos 只创建 NAS 侧的东西）
+  for (const selector of ['#mcp-config', '#copy-json', '#copy-toml', '#add-root', '[data-install]', '[data-select]', '#cancel-download', '#download-status']) {
+    assert.equal(await page.locator(selector).count(), 0, `${selector} 是桌面专属元素，飞牛端不应出现`);
+  }
+  assert((await page.locator('#version-badge').textContent()).includes('1.2.14.0'), '版本角标应来自 /api/settings');
 
   for (const [group, operation] of [['office', 'office_to_pdf'], ['image', 'image_convert'], ['audio', 'audio_convert'], ['video', 'video_convert'], ['pdf', 'pdf_compress']]) {
     await page.locator(`[data-group=${group}]`).click();
@@ -329,6 +333,12 @@ try {
   await page.waitForFunction(() => document.querySelector('#roots')?.textContent.includes('files'));
   await page.waitForFunction(() => document.querySelector('#history')?.textContent.includes('PDF 压缩'), null, {timeout: 8000});
   assert((await page.getByRole('button', {name: '按原参数重试'}).count()) > 0);
+  // 设置页同样是飞牛版：只读授权目录 + 组件只读，桌面专属控件不可见
+  assert.equal(await page.locator('#open-settings').isVisible(), true, '飞牛端应有「打开应用设置」');
+  assert.equal(await page.locator('#roots-heading-label').isVisible(), true);
+  assert.equal(await page.locator('#add-root').count(), 0, '飞牛端不应出现 AI 目录增删');
+  assert.equal(await page.locator('[data-install]').count(), 0, '飞牛端组件随应用提供，不应出现安装入口');
+  assert.equal(await page.locator('#mcp-config').count(), 0, '飞牛端不应出现 MCP 配置');
   assert.equal(await page.locator('#work-panel').isVisible(), false);
   assert.equal(await page.locator('#settings-panel').isVisible(), true);
   // 契约 §2.8：/api/settings.hardware → 一行视频硬件加速状态（可用/不可用 + 原因或设备）

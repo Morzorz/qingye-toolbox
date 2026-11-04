@@ -14,7 +14,7 @@ import {hwStatus} from '../src/hwaccel.mjs';
 import {createLocalMcpServer} from './local-mcp.mjs';
 import {startWebEntry,resolveWebEntryOptions} from './web-entry.mjs';
 
-export const VERSION='1.2.13.5';
+export const VERSION='1.2.14.0';
 export const PREFIX='/app/qingye';
 export const CSP="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'";
 
@@ -86,7 +86,7 @@ const localHints=name=>[
 // 只暴露页面真正引用的三个静态资源；其余（catalog.mjs、bridge.js 等）在构建期已打进 app.js。
 const assets={
  'app.js':{file:'fnos/web/app.bundle.js',type:'text/javascript; charset=utf-8'},
- 'app.css':{file:'fnos/web/app.css',type:'text/css; charset=utf-8'},
+ 'app.css':{file:'src/ui/app.css',type:'text/css; charset=utf-8'},
  'styles.css':{file:'src/styles.css',type:'text/css; charset=utf-8'}
 };
 

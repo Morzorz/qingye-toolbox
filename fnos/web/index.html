@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light">
 <title>轻页文件工具箱 · 飞牛独立版</title>
-<link rel="stylesheet" href="styles.css?v=1.2.13.5">
-<link rel="stylesheet" href="app.css?v=1.2.13.5">
-<script defer src="app.js?v=1.2.13.5"></script>
+<link rel="stylesheet" href="styles.css?v=1.2.14.0">
+<link rel="stylesheet" href="app.css?v=1.2.14.0">
+<script defer src="app.js?v=1.2.14.0"></script>
 </head>
 <body>
 <aside class="sidebar">
@@ -21,9 +21,9 @@
     <button type="button" class="nav-item" data-group="settings">⚙　组件与目录</button>
   </nav>
   <div class="sidebar-foot">
-    <div class="local-line"><span class="local-dot" aria-hidden="true"></span>文件在 NAS 本机处理</div>
-    <p>独立应用 · 目录授权由飞牛管理</p>
-    <small id="sidebar-version">飞牛独立版</small>
+    <div class="local-line"><span class="local-dot" aria-hidden="true"></span><span id="sidebar-local">文件在 NAS 本机处理</span></div>
+    <p id="sidebar-note">独立应用 · 目录授权由飞牛管理</p>
+    <small id="sidebar-version">飞牛独立版 1.2.14.0</small>
   </div>
 </aside>
 <main id="main">
@@ -33,7 +33,7 @@
       <h1 id="title">PDF 工具</h1>
       <p id="subtitle">压缩、合并与格式转换，保留你的原文件。</p>
     </div>
-    <span class="badge" id="version-badge">飞牛独立版</span>
+    <span class="badge" id="version-badge">飞牛独立版 1.2.14.0</span>
   </header>
 
   <section class="panel" id="work-panel" aria-label="文件处理">
@@ -91,10 +91,10 @@
 
   <section class="panel panel-scroll" id="settings-panel" hidden aria-label="组件与目录">
     <section class="card">
-      <h2>授权目录</h2>
-      <p>轻页以独立应用账号运行，只读取飞牛明确授权给轻页的目录；在下方点「重新授权」后立即生效，无需重启应用。</p>
+      <h2 id="roots-title">授权目录</h2>
+      <p id="roots-desc">轻页以独立应用账号运行，只读取飞牛明确授权给轻页的目录；在下方点「重新授权」后立即生效，无需重启应用。</p>
       <div class="roots-heading">
-        <strong>应用可访问的目录</strong>
+        <strong id="roots-heading-label">应用可访问的目录</strong>
         <button type="button" id="open-settings" class="secondary">打开应用设置</button>
       </div>
       <div id="roots" class="roots"></div>
@@ -102,8 +102,8 @@
       <p class="small-note" id="settings-note" role="status"></p>
     </section>
     <section class="card">
-      <h2>转换组件</h2>
-      <p>转换组件随应用提供，无需单独下载安装；缺少组件时任务会给出明确提示。</p>
+      <h2 id="components-title">转换组件</h2>
+      <p id="components-desc">转换组件随应用提供，无需单独下载安装；缺少组件时任务会给出明确提示。</p>
       <div id="components" class="components"></div>
     </section>
     <section class="card">
