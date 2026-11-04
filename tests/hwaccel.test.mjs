@@ -82,18 +82,28 @@ test('detectHw fails soft and caches the negative probe',async()=>{
   assert.equal(unsupported.available,false);
   assert.match(unsupported.reason,/硬件编码/);
 
-  // 显式指定后端，保证任意平台都会真的跑一次试编码
-  clearHwCache();
-  assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
-  const status=await hwStatus(fake,{backends:['videotoolbox']});
-  assert.equal(status.available,false);
-  assert.match(status.reason,/试编码失败/);
-  assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,1,'失败结果必须缓存，避免每个任务重复探测');
-  assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
-  assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,1,'命中缓存时不应再次启动进程');
-  clearHwCache();
-  assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
-  assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,2);
+  if(process.platform==='win32'){
+   // Windows 不能 spawn 一个 #!/bin/sh 脚本，这里改用真实进程（node 收到 ffmpeg 参数会非零退出），
+   // 只验证「探测失败但不抛错」；缓存计数断言依赖 POSIX 脚本，放在下面的分支里。
+   clearHwCache();
+   assert.equal(await detectHw(process.execPath,{backends:['videotoolbox']}),null);
+   const status=await hwStatus(process.execPath,{backends:['videotoolbox']});
+   assert.equal(status.available,false);
+   assert.match(status.reason,/试编码失败/);
+  }else{
+   // 显式指定后端，保证任意平台都会真的跑一次试编码
+   clearHwCache();
+   assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
+   const status=await hwStatus(fake,{backends:['videotoolbox']});
+   assert.equal(status.available,false);
+   assert.match(status.reason,/试编码失败/);
+   assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,1,'失败结果必须缓存，避免每个任务重复探测');
+   assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
+   assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,1,'命中缓存时不应再次启动进程');
+   clearHwCache();
+   assert.equal(await detectHw(fake,{backends:['videotoolbox']}),null);
+   assert.equal((await fs.readFile(calls,'utf8')).trim().split('\n').length,2);
+  }
  }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
 
