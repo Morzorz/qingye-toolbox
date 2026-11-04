@@ -40,6 +40,12 @@ jobs:
             -f fnos/Dockerfile --target payload \
             --output type=local,dest=fnos/build/payload .
 
+      - name: 修正 payload 权限（Docker 产物属主是 root）
+        run: |
+          # type=local 输出由容器内 root 写入；后面容器以 uid 1000 运行，需要可读可进入。
+          sudo chmod -R a+rX fnos/build/payload
+          test -r fnos/build/payload/package.json
+
       - name: 下载官方 fnpack 并校验
         run: |
           curl -fsSL "$FNPACK_URL" -o /usr/local/bin/fnpack

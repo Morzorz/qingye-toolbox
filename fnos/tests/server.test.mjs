@@ -618,12 +618,12 @@ test('jobs, history, retry, cancel and downloads stay scoped to the owner',async
  assert(history.body.some(item=>item.id===id));
  assert.equal((await req('/api/history',{headers:{'X-Trim-Userid':'1001'}})).body.length,0);
  const retried=await req('/api/retry',{method:'POST',data:{id}});
- assert.equal(retried.status,200);
+ assert.equal(retried.status,200,retried.raw?.toString());
  assert.notEqual(retried.body.jobId,id);
  await wait(retried.body.jobId);
  assert.equal((await req('/api/retry',{method:'POST',data:{id},headers:{'X-Trim-Userid':'1001'}})).status,404);
  const targeted=await req('/api/jobs',{method:'POST',data:{operation:'pdf_compress',inputs:[input],outputDir:share,options:{preset:'small',targetMB:0.1}}});
- assert.equal(targeted.status,200);
+ assert.equal(targeted.status,200,targeted.raw?.toString());
  const result=await wait(targeted.body.jobId);
  assert.equal(result.status,'completed');
  assert(result.results[0].after<=0.1*1024*1024);
