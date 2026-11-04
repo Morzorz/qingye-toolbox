@@ -1,0 +1,16 @@
+# 统一换行：仓库内文本一律 LF（fnOS 生命周期脚本必须是 LF，否则 NAS 上无法执行）
+* text=auto eol=lf
+
+# 二进制资源，不做换行转换
+*.png binary
+*.ico binary
+*.icns binary
+*.otf binary
+*.ttf binary
+*.wasm binary
+*.fpk binary
+*.gz binary
+
+# 明确 LF 的可执行脚本
+*.sh text eol=lf
+fnos/package/cmd/* text eol=lf

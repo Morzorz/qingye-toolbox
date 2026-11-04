@@ -1,17 +1,25 @@
-name: Build and test desktop packages
+name: Build desktop packages
+
 on:
   workflow_dispatch:
   push:
     tags: ['v*']
+
+permissions:
+  contents: write
+
 jobs:
   package:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             build: build:win
+            artifact: release/*.exe
           - os: macos-latest
             build: build:mac
+            artifact: release/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +33,7 @@ jobs:
       - run: npm run ${{ matrix.build }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Verify packaged Windows application
+      - name: 校验打包后的 Windows 应用
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -35,7 +43,14 @@ jobs:
           node --test tests/mcp.test.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: qingye-${{ runner.os }}
+          name: qingye-desktop-${{ runner.os }}
           path: |
             release/*.exe
             release/*.dmg
+          if-no-files-found: error
+      - name: 附加到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
+          fail_on_unmatched_files: true

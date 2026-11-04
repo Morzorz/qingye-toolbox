@@ -1,0 +1,98 @@
+name: Build fnOS FPK
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fpk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 官方 fnpack 1.2.3（linux-amd64），校验和固定，避免上游替换
+  FNPACK_URL: https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64
+  FNPACK_SHA256: 54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93
+
+jobs:
+  fpk:
+    name: 构建 fnOS 安装包
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建 Linux 运行文件（Docker payload）
+        run: |
+          docker build --platform linux/amd64 \
+            -f fnos/Dockerfile --target payload \
+            --output type=local,dest=fnos/build/payload .
+
+      - name: 下载官方 fnpack 并校验
+        run: |
+          curl -fsSL "$FNPACK_URL" -o /usr/local/bin/fnpack
+          echo "$FNPACK_SHA256  /usr/local/bin/fnpack" | sha256sum -c -
+          chmod +x /usr/local/bin/fnpack
+          fnpack --help | head -3
+
+      - name: 打包 FPK
+        run: |
+          node fnos/build-fpk.mjs
+          ls -lh release/*.fpk
+
+      - name: 校验包内容
+        run: |
+          FPK=$(ls release/*.fpk)
+          echo "artifact=$FPK"
+          tar -tzf "$FPK" | grep -qx 'manifest'
+          tar -tzf "$FPK" | grep -q 'app.tgz'
+          VERSION=$(tar -xzf "$FPK" -O manifest | awk -F' *= *' '$1=="version"{print $2}')
+          test -n "$VERSION"
+          test "$(basename "$FPK")" = "Qingye-Toolbox-${VERSION}-fnos-x86.fpk"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        id: verify
+
+      - name: Linux 运行时回归（打包内 Node，无 GPU 时应回退 CPU）
+        run: |
+          docker run --rm --platform linux/amd64 --network none --user 1000:1000 \
+            --tmpfs /app:rw,mode=1777 \
+            -v "$PWD/fnos/build/payload:/payload:ro" \
+            -v "$PWD/fnos:/test-fnos:ro" \
+            -v "$PWD/src:/test-src:ro" \
+            -v "$PWD/tests:/test-fixtures:ro" \
+            -e QINGYE_DATA_DIR=/tmp/qingye-test-settings \
+            docker.m.daocloud.io/library/node:22-bookworm-slim \
+            sh -c 'set -eu
+              cp -R /test-src /app/src
+              mkdir /app/fnos
+              cp -R /test-fnos/server.mjs /test-fnos/local-mcp.mjs /test-fnos/web-entry.mjs /test-fnos/web /test-fnos/tests /test-fnos/package /app/fnos/
+              cp /payload/package.json /app/package.json
+              ln -s /payload/runtime /app/runtime
+              ln -s /payload/node_modules /app/node_modules
+              ln -s /payload/assets /app/assets
+              cp -R /test-fixtures /app/tests
+              /app/runtime/bin/node /app/fnos/tests/server.test.mjs
+              QINGYE_LIFECYCLE_DIR=/app/fnos/package/cmd bash /app/fnos/tests/lifecycle.sh'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qingye-fnos-${{ steps.verify.outputs.version }}
+          path: release/*.fpk
+          if-no-files-found: error
+
+      - name: 附加到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.fpk
+          fail_on_unmatched_files: true

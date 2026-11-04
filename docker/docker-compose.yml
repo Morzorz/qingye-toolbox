@@ -1,0 +1,23 @@
+services:
+  qingye:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: qingye-toolbox:1.2.13.0
+    container_name: qingye
+    ports:
+      - "${QINGYE_PORT:-8080}:8080"
+    environment:
+      QINGYE_ROOTS: /input:/output:/data/files
+      QINGYE_SHARE: /data/files
+      QINGYE_PASSWORD: "${QINGYE_PASSWORD:-}"
+      QINGYE_USERNAME: "${QINGYE_USERNAME:-admin}"
+    volumes:
+      - "${QINGYE_INPUT:-./input}:/input:ro"
+      - "${QINGYE_OUTPUT:-./output}:/output"
+      - "${QINGYE_DATA:-./data}:/data"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # 以 root 运行可读取宿主机上属主不同的文件；如需限制权限，取消下面 user 的注释，
+    # 并确保挂载目录对该 UID/GID 可读写。
+    # user: "1000:1000"

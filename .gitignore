@@ -3,3 +3,10 @@ release/
 src-tauri/target/
 artifacts/
 .DS_Store
+
+# 本地实验目录（Tauri 外壳未接入产品，暂不入库）
+src-tauri/
+
+# 本地环境与临时文件
+.env
+*.log

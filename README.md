@@ -2,6 +2,26 @@
 
 保留 Electron 桌面方案，文件在本机处理，原文件不覆盖。提供 Windows x64 EXE 和苹果芯片 Mac DMG。
 
+## 飞牛独立版
+
+飞牛 NAS 上另有独立 FPK 版本（1.2.13.5），从飞牛桌面直接打开，复用统一网关登录，不经过 Docker：
+
+- 主界面只有两个入口：“从 NAS 上选择”（同一个窗口里选文件或加入整个文件夹）和“上传电脑文件”。
+- 目录权限按飞牛官方机制处理：共享目录由系统授权，其他目录在应用内重新授权后即时生效，无需重启应用。
+- 安装、权限排查与构建说明见 [fnos/README.md](fnos/README.md)。
+
+## Docker 版
+
+也可以直接用 Docker 运行同一套转换引擎：通过 `volumes` 挂载输入/输出目录，不经过飞牛应用授权和 ACL，适合在飞牛、群晖或普通 Linux 主机上使用。
+
+```sh
+cd docker
+docker compose up -d --build
+```
+
+打开 `http://NAS_IP:8080/app/qingye/`。完整说明见 [docker/README.md](docker/README.md)。
+
+
 ## 1.1.1 中文显示修复
 
 修复无界面办公组件未加载中文字体时，生成 PDF 显示空白或方框的问题。内置约 8 MiB 的 Noto Sans SC 字体，只放入临时转换配置中，不安装系统字体、不更改原文档。缺少原字体时使用回退字体，字形与排版可能与原字体略有差别。升级后请使用原始 Word、Excel 或 PPT 重新转换；已生成的错误 PDF 不会自动更新。
@@ -16,7 +36,7 @@
 | 图片 | JPG/PNG/WebP 互转、缩放、多图转 PDF |
 | 办公文档 | Word/Excel/PPT 转 PDF，需 LibreOffice |
 | 音频 | 转 MP3/WAV/FLAC/M4A、从视频提取音频，需 FFmpeg |
-| 视频 | 转 MP4、压缩、调整分辨率，需 FFmpeg |
+| 视频 | 转 MP4、压缩、调整分辨率，需 FFmpeg；有 Intel 核显（VAAPI）时自动硬件加速，失败自动回退 CPU |
 | AI 调用 | 本地 stdio MCP、命令行 JSON 任务 |
 
 每批最多 100 个输入，支持进度、取消、结果定位和重名自动编号。合并按列表顺序，可上下调整。默认保存到第一个输入文件所在目录，也可另选目录。PDF 拆分目前是指定页码提取为一个 PDF（例如 `1-3,5`）。不支持 PDF 还原为可编辑 Office，也不包含 OCR。

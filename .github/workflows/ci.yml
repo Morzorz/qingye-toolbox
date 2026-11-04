@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: 转换引擎与桌面端单测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 语法检查
+        run: |
+          node --check src/entry.cjs
+          node --check src/desktop.cjs
+          node --check src/jobs.mjs
+          node --check src/catalog.mjs
+          node --check src/media-office.mjs
+          node --check src/hwaccel.mjs
+          node --check src/mcp.mjs
+          node --check fnos/server.mjs
+          node --check fnos/web-entry.mjs
+          node --check fnos/local-mcp.mjs
+          node --check fnos/build-fpk.mjs
+          node --check fnos/assemble-runtime.mjs
+      - name: 引擎单测（Office 相关用例在缺少样本时自动跳过）
+        run: node --test tests/*.test.mjs
+
+  fnos-server:
+    name: 飞牛版接口与服务端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test fnos/tests/server.test.mjs
+      - name: 构建前端产物（确保 esbuild 可复现）
+        run: |
+          node fnos/build-client.mjs
+          test -s fnos/web/app.bundle.js
+          git diff --exit-code -- fnos/web/app.bundle.js
+
+  fnos-ui:
+    name: 飞牛版界面测试（Chrome headless）
+    runs-on: ubuntu-latest
+    # 界面用例依赖真实浏览器与本地代理，先作为观测项，不阻塞合并
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node fnos/tests/browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnos-ui-screenshots
+          path: artifacts/*.png
+          if-no-files-found: ignore
