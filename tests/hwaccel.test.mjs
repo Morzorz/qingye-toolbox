@@ -71,7 +71,12 @@ test('detectHw fails soft and caches the negative probe',async()=>{
   assert.equal(await detectHw('/nonexistent/ffmpeg'),null);
   const missing=await hwStatus('/nonexistent/ffmpeg');
   assert.equal(missing.available,false);
-  assert.match(missing.reason,/ffmpeg/);
+  // 各平台默认后端不同（win32 没有默认后端），这里只要求给出可读原因；
+  // 「缺少 ffmpeg」的稳定断言放在下面显式指定后端的用例里。
+  assert(missing.reason.length>0);
+  const missingEngine=await hwStatus('/nonexistent/ffmpeg',{backends:['videotoolbox']});
+  assert.equal(missingEngine.available,false);
+  assert.match(missingEngine.reason,/ffmpeg/);
   assert.equal(await detectHw(null),null);
   const unsupported=await hwStatus(fake,{backends:[]});
   assert.equal(unsupported.available,false);
