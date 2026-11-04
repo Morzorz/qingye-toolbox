@@ -655,8 +655,19 @@ test('job validation failures are 400 JOB_REJECTED, not 500', async()=>{
 });
 
 test('shutdown cancels active conversions and leaves no worker temp folders',async()=>{
- const response=await req('/api/jobs',{method:'POST',data:{operation:'pdf_compress',inputs:Array(50).fill(input),outputDir:share}});
- assert.equal(response.status,200);
+ // 上一个用例可能刚提交过任务；等到没有活动任务再提交，避免时序导致的 JOB_REJECTED 误判。
+ let firstRejection=null;
+ const response=await (async()=>{
+  for(let attempt=0;attempt<20;attempt++){
+   const r=await req('/api/jobs',{method:'POST',data:{operation:'pdf_compress',inputs:Array(50).fill(input),outputDir:share}});
+   if(r.status===200)return r;
+   if(r.body?.code!=='JOB_REJECTED')return r;
+   if(!firstRejection)firstRejection=r.raw?.toString();
+   await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  return req('/api/jobs',{method:'POST',data:{operation:'pdf_compress',inputs:Array(50).fill(input),outputDir:share}});
+ })();
+ assert.equal(response.status,200,'首次拒绝：'+firstRejection+' 最终：'+response.raw);
  await app.close();
  assert.equal(app.jobs.snapshot(response.body.jobId).status,'cancelled');
  assert(!(await fs.readdir(share)).some(name=>name.startsWith('.qingye-')));
