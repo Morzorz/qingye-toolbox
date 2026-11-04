@@ -110,3 +110,4 @@ jobs:
         with:
           files: release/*.fpk
           fail_on_unmatched_files: true
+          overwrite_files: true

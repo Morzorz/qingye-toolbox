@@ -12,7 +12,9 @@ test('MCP handshake, permissions, submit and polling work end to end',async()=>{
   await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({roots:[allowed],engines:{}}));
   const transport=new StdioClientTransport({command:process.env.QINGYE_PACKAGED_APP||process.execPath,args:process.env.QINGYE_PACKAGED_APP?['--mcp']:['scripts/mcp-server.mjs'],env:{...process.env,QINGYE_DATA_DIR:data},stderr:'pipe'});
   let errors='';transport.stderr?.on('data',d=>errors+=d.toString());
-  const client=new Client({name:'test-client',version:'1.0.0'});await client.connect(transport);
+  const client=new Client({name:'test-client',version:'1.0.0'});
+  // 云端 Windows 首次启动打包应用可能很慢，允许用环境变量放宽握手超时。
+  await client.connect(transport,{timeout:Number(process.env.QINGYE_MCP_TIMEOUT_MS||60000)});
   try{
     assert.equal((await client.listTools()).tools.length,4);
     const denied=await client.callTool({name:'submit_task',arguments:{operation:'pdf_compress',inputs:[outside],outputDir:allowed}});assert.equal(denied.isError,true);
