@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findEngine, runProcess } from './components.mjs';
+import { buildVideoArgs, detectHw } from './hwaccel.mjs';
 export async function convertExternal({operation,inputs,options,temp},signal,progress) {
   const kind=operation==='office_to_pdf'?'office':'media';const binary=await findEngine(kind);
   if(!binary)throw new Error(`缺少${kind==='office'?'办公文档':'音视频'}组件，请先在「组件与 AI」中下载或选择已安装组件`);
@@ -31,17 +32,38 @@ export async function convertExternal({operation,inputs,options,temp},signal,pro
     }finally{await fs.rm(work,{recursive:true,force:true}).catch(()=>{});}
   }
   const format=operation==='audio_convert'?options.format:'mp4';const output=path.join(temp,`${base}_转换.${format}`);
-  const args=['-hide_banner','-nostdin','-y','-protocol_whitelist','file,pipe','-i',inputs[0]];
-  if(operation==='audio_convert') {
-    args.push('-map','0:a:0','-vn');
+  // 进度解析：ffmpeg -progress pipe:1 的 out_time_us 对比容器时长；硬件执行时给 stage 加前缀。
+  const runMedia=async(args,{prefix='',running='正在转换音视频…'}={})=>{
+    let duration=0,stderr='',stdout='';
+    const stageFor=seconds=>{
+      if(prefix)return seconds===null?`${prefix}正在转换…`:`${prefix}已处理 ${Math.round(seconds)} 秒…`;
+      return seconds===null?running:`已处理 ${Math.round(seconds)} 秒…`;
+    };
+    try{
+     await runProcess(binary,args,{signal,onStderr:chunk=>{stderr=(stderr+chunk).slice(-5000);const m=stderr.match(/Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/);if(m)duration=Number(m[1])*3600+Number(m[2])*60+Number(m[3]);},onStdout:chunk=>{stdout+=chunk;let index;while((index=stdout.indexOf('\n'))>=0){const line=stdout.slice(0,index);stdout=stdout.slice(index+1);if(line.startsWith('out_time_us=')){const seconds=Number(line.slice(12))/1e6;progress({percent:duration?Math.min(98,Math.round(seconds/duration*100)):5,stage:stageFor(duration?null:seconds)});}}}});
+    }catch(error){error.stderrTail=stderr.replace(/\s+/g,' ').trim().slice(-400);throw error;}
+  };
+  if(operation==='audio_convert'){
+    // 音频转换不走硬件（契约 §2.8）。
     const bitrate={clear:'256k',balanced:'192k',small:'96k'}[options.preset];
-    if(format==='mp3')args.push('-c:a','libmp3lame','-b:a',bitrate);
-    if(format==='m4a')args.push('-c:a','aac','-b:a',bitrate);
-    if(format==='wav')args.push('-c:a','pcm_s16le');
-    if(format==='flac')args.push('-c:a','flac');
-  }else args.push('-map','0:v:0','-map','0:a:0?','-c:v','libx264','-preset','medium','-crf',String({clear:20,balanced:25,small:30}[options.preset]),'-vf',`scale=-2:trunc(min(ih\\,${options.maxHeight})/2)*2`,'-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart');
-  args.push('-progress','pipe:1','-nostats',output);
-  let duration=0,stderr='',stdout='';
-  await runProcess(binary,args,{signal,onStderr:chunk=>{stderr=(stderr+chunk).slice(-5000);const m=stderr.match(/Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/);if(m)duration=Number(m[1])*3600+Number(m[2])*60+Number(m[3]);},onStdout:chunk=>{stdout+=chunk;let index;while((index=stdout.indexOf('\n'))>=0){const line=stdout.slice(0,index);stdout=stdout.slice(index+1);if(line.startsWith('out_time_us=')){const seconds=Number(line.slice(12))/1e6;progress({percent:duration?Math.min(98,Math.round(seconds/duration*100)):5,stage:duration?'正在转换音视频…':`已处理 ${Math.round(seconds)} 秒…`});}}}});
+    const codec=format==='mp3'?['-c:a','libmp3lame','-b:a',bitrate]:format==='m4a'?['-c:a','aac','-b:a',bitrate]:format==='wav'?['-c:a','pcm_s16le']:['-c:a','flac'];
+    await runMedia(['-hide_banner','-nostdin','-y','-protocol_whitelist','file,pipe','-i',inputs[0],'-map','0:a:0','-vn',...codec,'-progress','pipe:1','-nostats',output]);
+    if((await fs.stat(output)).size===0)throw new Error('转换输出为空');
+    return {outputs:[output]};
+  }
+  // 视频：硬件先行（契约 §2.8），进程失败则记录并回退 CPU 重跑一次。
+  const hardware=options.hw==='off'?null:await detectHw(binary).catch(()=>null);
+  if(hardware){
+    try{
+      await runMedia(buildVideoArgs({backend:hardware.backend,device:hardware.device,options,input:inputs[0],output}),{prefix:'硬件加速（'+hardwareLabel(hardware.backend)+'）'});
+    }catch(error){
+      if(signal?.aborted)throw error;
+      console.log('Qingye hardware video conversion failed, retrying on CPU:',JSON.stringify({backend:hardware.backend,device:hardware.device??null,error:error.message,ffmpeg:error.stderrTail||null}));
+      progress({percent:0,stage:'硬件加速不可用，已改用 CPU 重新转换…'});
+      await fs.rm(output,{force:true}).catch(()=>{});
+      await runMedia(buildVideoArgs({backend:'software',options,input:inputs[0],output}),{running:'正在转换视频…'});
+    }
+  }else await runMedia(buildVideoArgs({backend:'software',options,input:inputs[0],output}),{running:'正在转换视频…'});
   if((await fs.stat(output)).size===0)throw new Error('转换输出为空');return {outputs:[output]};
 }
+const hardwareLabel=backend=>backend==='vaapi'?'VAAPI':backend==='videotoolbox'?'VideoToolbox':'GPU';

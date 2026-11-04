@@ -41,4 +41,7 @@ test('actual audio and video conversion',{skip:!(await findEngine('media'))},asy
   await runProcess(binary,['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','color=c=red:s=320x240:r=15:d=1','-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','libx264','-c:a','aac','-shortest',source]);
   const audio=await run({operation:'audio_convert',inputs:[source],outputDir:root,options:{format:'mp3'}});assert.equal(audio.status,'completed',JSON.stringify(audio));assert((await fs.stat(audio.results[0].outputs[0])).size>1000);
   const video=await run({operation:'video_convert',inputs:[source],outputDir:root,options:{maxHeight:480}});assert.equal(video.status,'completed',JSON.stringify(video));await runProcess(binary,['-v','error','-i',video.results[0].outputs[0],'-f','null','-']);
+  // 契约 §2.8：hw:'off' 必须直接走软件路径（等价于“无 GPU”环境的行为）
+  const software=await run({operation:'video_convert',inputs:[source],outputDir:root,options:{maxHeight:480,hw:'off'}});assert.equal(software.status,'completed',JSON.stringify(software));await runProcess(binary,['-v','error','-i',software.results[0].outputs[0],'-f','null','-']);
+  assert.notEqual(software.results[0].outputs[0],video.results[0].outputs[0]);
 });

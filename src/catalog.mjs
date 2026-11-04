@@ -15,6 +15,7 @@ export function validateOptions(operation, raw = {}) {
   const preset = raw.preset ?? 'balanced';
   if (!['clear','balanced','small'].includes(preset)) throw new Error('无效的质量档位');
   const result = { preset };
+  if(operation==='pdf_compress'&&raw.targetMB!==undefined){if(typeof raw.targetMB!=='number'||!Number.isFinite(raw.targetMB)||raw.targetMB<0.1||raw.targetMB>500)throw new Error('目标大小需为 0.1–500 MB');result.targetMB=raw.targetMB;}
   if (operation === 'image_convert') {
     result.format = raw.format ?? 'jpg';
     if (!['jpg','png','webp'].includes(result.format)) throw new Error('图片格式需为 jpg、png 或 webp');
@@ -38,6 +39,9 @@ export function validateOptions(operation, raw = {}) {
   if (operation === 'video_convert') {
     result.maxHeight = raw.maxHeight ?? 1080;
     if (![480,720,1080,2160].includes(result.maxHeight)) throw new Error('视频高度需为 480、720、1080 或 2160');
+    // 契约 §2.8：hardware acceleration 开关，'auto' 表示有可用后端就用、失败自动回退 CPU。
+    result.hw = raw.hw ?? 'auto';
+    if (!['auto','off'].includes(result.hw)) throw new Error('硬件加速选项需为 auto（自动）或 off（关闭）');
   }
   return result;
 }

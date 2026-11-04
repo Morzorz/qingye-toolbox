@@ -26,12 +26,17 @@ function controls(){
  $('options').replaceChildren();const operation=op();$('formats').textContent=`${OPERATIONS[operation].extensions.join(' / ').toUpperCase()} · 每批最多 100 个文件`;
  $('operation-note').textContent=OPERATIONS[operation].combined?'按列表顺序合并，可用箭头调整顺序':'';
  function field(label,id,values,value,type='select'){const l=document.createElement('label');l.textContent=label;const e=document.createElement(type==='select'?'select':'input');e.id=id;if(type==='select'){for(const v of values){const o=document.createElement('option');o.value=v;o.textContent=String(v).toUpperCase();e.append(o);}}else e.type=type;e.value=value;l.append(e);$('options').append(l);}
+ if(operation==='pdf_compress'){field('目标大小 MB（可选）','target-mb',[], '', 'number');$('target-mb').min='0.1';$('target-mb').max='500';$('target-mb').step='0.1';}
  if(operation==='image_convert')field('输出格式','format',['jpg','png','webp'],'jpg');
  if(operation==='pdf_to_images')field('输出格式','format',['png','jpg'],'png');
  if(['image_convert','pdf_to_images'].includes(operation))field('最长边（像素）','dimension',[],2600,'number');
  if(operation==='pdf_split')field('提取页码','pages',[],'1-3','text');
  if(operation==='audio_convert')field('输出格式','format',['mp3','wav','flac','m4a'],'mp3');
- if(operation==='video_convert')field('最大高度','height',[480,720,1080,2160],1080);
+ if(operation==='video_convert'){
+  field('最大高度','height',[480,720,1080,2160],1080);
+  field('硬件加速','hw',['auto','off'],'auto');
+  const hw=$('hw');if(hw){hw.options[0].textContent='自动';hw.options[1].textContent='关闭';const note=document.createElement('span');note.className='note';note.textContent='无核显时自动用 CPU';$('options').append(note);}
+ }
  if(operation==='office_to_pdf'){const p=document.createElement('span');p.className='note';p.textContent='输出 PDF；排版可能受本机字体影响。首次使用需安装办公组件。';$('options').append(p);}
  document.querySelector('.presets').hidden=['pdf_merge','pdf_split','images_to_pdf','office_to_pdf'].includes(operation);
 }
@@ -39,19 +44,25 @@ function switchGroup(group){const labels={pdf:'PDF 工具',office:'办公文档'
  $('operation').replaceChildren();for(const [key,value]of Object.entries(OPERATIONS)){if(value.group===group){const e=document.createElement('option');e.value=key;e.textContent=value.label;$('operation').append(e);}}files=[];job=null;$('message').textContent='';$('summary').textContent='准备好，开始处理文件';controls();render();}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>switchGroup(b.dataset.group));$('operation').onchange=()=>{files=[];job=null;controls();render();};
 function added(r){for(const f of r.added)if(!files.some(v=>v.path===f.path)&&files.length<100)files.push(f);job=null;$('message').textContent=r.errors.join('\n');render();}
+document.addEventListener('qingye:add-files',event=>added(event.detail));
 $('pick').onclick=e=>{e.stopPropagation();safe(async()=>added(await api.pickFiles(op())))();};$('dropzone').onclick=e=>{if(e.target.closest('button,input,label,a'))return;if(!busy)safe(async()=>added(await api.pickFiles(op())))();};$('dropzone').onkeydown=e=>{if(e.target===$('dropzone')&&['Enter',' '].includes(e.key)){e.preventDefault();$('dropzone').click();}};
 for(const event of ['dragover','drop'])document.addEventListener(event,e=>e.preventDefault());$('dropzone').ondragover=()=>{if(!busy)$('dropzone').classList.add('drag');};$('dropzone').ondragleave=()=>$('dropzone').classList.remove('drag');$('dropzone').ondrop=e=>{$('dropzone').classList.remove('drag');if(!busy)safe(async()=>added(await api.dropFiles(Array.from(e.dataTransfer.files),op())))();};
 document.querySelectorAll('input[name=preset]').forEach(e=>e.onchange=()=>document.querySelectorAll('.preset').forEach(l=>l.classList.toggle('selected',l.querySelector('input').checked)));
 $('clear').onclick=()=>{files=[];job=null;$('message').textContent='';render();};$('folder-pick').onclick=safe(async()=>{const p=await api.pickFolder();if(p){folder=p;$('folder').textContent=p;$('folder').title=p;$('folder-reset').hidden=false;}});$('folder-reset').onclick=()=>{folder=null;$('folder').textContent='第一个文件所在文件夹';$('folder-reset').hidden=true;};
 $('start').onclick=safe(async()=>{
  busy=true;job=null;$('message').textContent='';$('summary').textContent='正在处理…';render();
- const options={preset:document.querySelector('input[name=preset]:checked').value};if($('format'))options.format=$('format').value;if($('dimension'))options.maxDimension=Number($('dimension').value);if($('height'))options.maxHeight=Number($('height').value);if($('pages'))options.pages=$('pages').value.replace(/\s/g,'');
- const first=files[0].path,outputDir=folder||first.slice(0,Math.max(first.lastIndexOf('/'),first.lastIndexOf('\\'))+1);
+ const options={preset:document.querySelector('input[name=preset]:checked').value};if($('format'))options.format=$('format').value;if($('dimension'))options.maxDimension=Number($('dimension').value);if($('height'))options.maxHeight=Number($('height').value);if($('hw'))options.hw=$('hw').value;if($('pages'))options.pages=$('pages').value.replace(/\s/g,'');
+ if($('target-mb')?.value)options.targetMB=Number($('target-mb').value);
+ const first=files[0].path,outputDir=folder||api.defaultOutput||first.slice(0,Math.max(first.lastIndexOf('/'),first.lastIndexOf('\\'))+1);
  try{const {jobId}=await api.start({operation:op(),inputs:files.map(f=>f.path),outputDir,options});job=await api.status(jobId);updateJob(job);}catch(e){busy=false;render();throw e;}
 });
 function updateJob(j){job=j;busy=j.status==='running';if(!busy){const done=j.results.filter(r=>r.status==='done'),failed=j.results.filter(r=>r.status==='failed');$('summary').textContent=`${j.status==='cancelled'?'任务已停止':'处理完成'} · ${done.length} 个成功${failed.length?`，${failed.length} 个失败`:''}`;$('hint').textContent=`已生成 ${j.results.reduce((n,r)=>n+r.outputs.length,0)} 个文件 · 原文件保留`;if(j.error)$('message').textContent=j.error;}else{$('summary').textContent=`${j.stage} ${j.percent}%`;}render();}
 api.onEvent(updateJob);$('cancel').onclick=safe(async()=>{if(job)await api.cancel(job.id);});
-async function loadSettings(){const s=await api.settings();for(const kind of ['media','office']){$(`${kind}-status`).textContent=s.components[kind]?'已就绪：'+s.components[kind]:'未安装';document.querySelector(`[data-install=${kind}]`).disabled=downloading||Boolean(s.components[kind]);}$('roots').replaceChildren();if(!s.roots.length)$('roots').textContent='尚未授权，AI 无法读写任何文件。';for(const root of s.roots){const row=document.createElement('div');row.className='root-row';const name=document.createElement('span');name.textContent=root;const b=document.createElement('button');b.className='link';b.textContent='撤销';b.onclick=safe(async()=>{await api.removeRoot(root);await loadSettings();});row.append(name,b);$('roots').append(row);}$('mcp-config').value=s.config.json;}
+async function loadSettings(){const s=await api.settings();
+ let hardware=$('hardware-status');
+ if(!hardware){hardware=document.createElement('p');hardware.id='hardware-status';hardware.className='small-note';const anchor=document.querySelector('.component-actions');if(anchor)anchor.before(hardware);else $('settings-panel').prepend(hardware);}
+ hardware.hidden=!s.hardware;
+ if(s.hardware)hardware.textContent=s.hardware.available?`视频硬件加速：可用（${String(s.hardware.backend||'').toUpperCase()}${s.hardware.device?` · ${s.hardware.device}`:''}）`:`视频硬件加速：不可用（${s.hardware.reason||'当前系统没有可用的视频硬件加速'}）`;for(const kind of ['media','office']){$(`${kind}-status`).textContent=s.components[kind]?'已就绪：'+s.components[kind]:'未安装';document.querySelector(`[data-install=${kind}]`).disabled=downloading||Boolean(s.components[kind]);}$('roots').replaceChildren();if(!s.roots.length)$('roots').textContent='尚未授权，AI 无法读写任何文件。';for(const root of s.roots){const row=document.createElement('div');row.className='root-row';const name=document.createElement('span');name.textContent=root;const b=document.createElement('button');b.className='link';b.textContent='撤销';b.onclick=safe(async()=>{await api.removeRoot(root);await loadSettings();});row.append(name,b);$('roots').append(row);}$('mcp-config').value=s.config.json;}
 $('refresh').onclick=safe(loadSettings);$('add-root').onclick=safe(async()=>{await api.addRoot();await loadSettings();});for(const kind of ['json','toml'])$(`copy-${kind}`).onclick=safe(async()=>{await api.copyConfig(kind);$('settings-message').textContent='配置已复制，请在 AI 客户端添加本地 MCP 服务。';});
 document.querySelectorAll('[data-select]').forEach(b=>b.onclick=safe(async()=>{await api.selectComponent(b.dataset.select);await loadSettings();}));
 document.querySelectorAll('[data-install]').forEach(b=>b.onclick=safe(async()=>{downloading=true;document.querySelectorAll('[data-install],[data-select]').forEach(e=>e.disabled=true);$('cancel-download').hidden=false;try{const r=await api.installComponent(b.dataset.install);$('download-status').textContent=r.message;}finally{downloading=false;$('cancel-download').hidden=true;document.querySelectorAll('[data-select]').forEach(e=>e.disabled=false);await loadSettings();render();}}));

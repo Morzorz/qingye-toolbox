@@ -8,8 +8,12 @@ import { OPERATIONS, validateOptions } from './catalog.mjs';
 import { convertExternal } from './media-office.mjs';
 export class JobService extends EventEmitter {
   jobs=new Map(); active=null;
+  constructor({historyFile=null}={}){super();this.historyFile=historyFile;}
+  async loadHistory(){if(!this.historyFile)return;try{const items=JSON.parse(await fs.readFile(this.historyFile,'utf8'));for(const item of items.slice(-100)){if(item.status==='running'){item.status='interrupted';item.stage='应用重启，任务已中断';}this.jobs.set(item.id,item);}}catch(e){if(e.code!=='ENOENT')throw e;}}
+  history(){return [...this.jobs.values()].map(j=>this.snapshot(j.id)).reverse();}
+  async saveHistory(){if(!this.historyFile)return;const file=this.historyFile+'.tmp';await fs.writeFile(file,JSON.stringify(this.history()),{mode:0o600});await fs.rename(file,this.historyFile);}
   snapshot(id){const j=this.jobs.get(id);if(!j)throw new Error('任务不存在或已过期');const {controller,authorize,...publicJob}=j;return structuredClone(publicJob);}
-  async submit(request,authorize=null){
+  async submit(request,authorize=null,owner=null){
     if(this.active)throw new Error('已有任务正在执行，请等待完成或取消');
     const {operation,inputs,outputDir}=request;const options=validateOptions(operation,request.options);
     if(!Array.isArray(inputs)||!inputs.length||inputs.length>100)throw new Error('每批需要 1–100 个文件');
@@ -30,10 +34,10 @@ export class JobService extends EventEmitter {
     if(OPERATIONS[operation].combined){let total=0;for(const p of canonical)total+=(await fs.stat(p)).size;if(total>500*1024**2)throw new Error('合并任务总输入不能超过 500 MB');}
     // Recheck after async validation so concurrent submit calls cannot both start.
     if(this.active)throw new Error('已有任务正在执行');
-    const id=randomUUID();const job={id,operation,inputs:canonical,outputDir:canonicalOutput,options,status:'running',percent:0,stage:'准备处理',results:[],createdAt:Date.now(),controller:new AbortController(),authorize};
+    const id=randomUUID();const job={id,owner,operation,inputs:canonical,outputDir:canonicalOutput,options,status:'running',percent:0,stage:'准备处理',results:[],createdAt:Date.now(),controller:new AbortController(),authorize};
     this.jobs.set(id,job);this.active=id;
     while(this.jobs.size>100){const oldest=this.jobs.keys().next().value;if(oldest===id)break;this.jobs.delete(oldest);}
-    setImmediate(()=>this.run(job));return {jobId:id};
+    try{await this.saveHistory();}catch(e){this.jobs.delete(id);this.active=null;throw e;}setImmediate(()=>this.run(job));return {jobId:id};
   }
   cancel(id){const j=this.jobs.get(id);if(!j)throw new Error('任务不存在');if(j.status==='running'){j.controller.abort();j.stage='正在停止…';}return this.snapshot(id);}
   notify(j){this.emit('update',this.snapshot(j.id));}
@@ -67,7 +71,7 @@ export class JobService extends EventEmitter {
       }
       j.status=j.controller.signal.aborted?'cancelled':j.results.some(r=>r.status==='failed')?'completed_with_errors':'completed';
     }catch(e){j.status='failed';j.error=e.message;}
-    finally{j.percent=j.status.startsWith('completed')?100:j.percent;j.finishedAt=Date.now();this.active=null;this.notify(j);}
+    finally{j.percent=j.status.startsWith('completed')?100:j.percent;j.finishedAt=Date.now();this.active=null;this.notify(j);await this.saveHistory().catch(e=>console.error('Qingye history save failed:',e.message));}
   }
   worker(params,signal,progress){
     return new Promise((resolve,reject)=>{

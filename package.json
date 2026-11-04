@@ -9,6 +9,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.mjs",
+    "test:docker": "node --test docker/tests/smoke.test.mjs",
+    "test:fnos": "node --test fnos/tests/server.test.mjs",
+    "test:fnos:ui": "node fnos/tests/browser.mjs",
     "build:mac": "electron-builder --mac dmg --arm64 --publish never",
     "build:win": "electron-builder --win nsis --x64 --publish never",
     "test:ui": "node scripts/toolbox-smoke.mjs",
@@ -16,6 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@trimjs/web-app": "0.5.0",
     "mupdf": "1.28.1",
     "sharp": "0.35.5",
     "zod": "4.6.6"

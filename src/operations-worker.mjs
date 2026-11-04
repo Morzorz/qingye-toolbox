@@ -24,7 +24,10 @@ async function imagePipeline(file) {
 try {
   const base = path.basename(inputs[0],path.extname(inputs[0]));
   if(operation==='pdf_compress') {
-    const r=compressPDF(await fs.readFile(inputs[0]),options.preset,p=>progress(p.percent,p.stage));
+    const input=await fs.readFile(inputs[0]),limit=options.targetMB?options.targetMB*1024*1024:Infinity;
+    let r=compressPDF(input,options.preset,p=>progress(p.percent,p.stage));
+    if(options.targetMB&&r.after>limit){for(const preset of ['clear','balanced','small']){if(preset===options.preset)continue;const candidate=compressPDF(input,preset,p=>progress(p.percent,p.stage));if(candidate.after<r.after)r=candidate;if(r.after<=limit)break;}}
+    if(r.after>limit)throw new Error(`无法压到 ${options.targetMB} MB 以下；当前最小约 ${(r.after/1024/1024).toFixed(2)} MB，请提高目标大小`);
     await save(`${base}_压缩版.pdf`,r.bytes);parentPort.postMessage({type:'result',outputs,reduced:r.reduced});
   } else if(operation==='image_convert') {
     let p=await imagePipeline(inputs[0]);p=p.resize({width:options.maxDimension,height:options.maxDimension,fit:'inside',withoutEnlargement:true});
