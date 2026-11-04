@@ -1,6 +1,6 @@
 # 桌面端与飞牛端 UI 统一（分支 feat/unified-desktop-ui）
 
-目标：把 1.2.13 起在飞牛端重做的界面与交互迁移到 macOS / Windows 桌面端，两端共用一份 UI 源码；版本号统一为 `1.2.14.0`。
+目标：把 1.2.13 起在飞牛端重做的界面与交互迁移到 macOS / Windows 桌面端，两端共用一份 UI 源码；版本号统一为 `1.2.14`。
 
 ## 1. 目录与加载
 
@@ -55,8 +55,8 @@ UI 行为：
 
 ## 4. 版本统一
 
-- `package.json` → `1.2.14.0`；`fnos/package/manifest` → `1.2.14.0`；`fnos/server.mjs` VERSION；`fnos/local-mcp.mjs`；`fnos/web/index.html` 的 `?v=`；`src/ui/app.mjs` 兜底文案；README 标题与飞牛 README。
-- 产物名：`Qingye-Toolbox-1.2.14.0-mac-arm64.dmg` / `-win-x64-setup.exe` / `-fnos-x86.fpk`。
+- `package.json` → `1.2.14`；`fnos/package/manifest` → `1.2.14`；`fnos/server.mjs` VERSION；`fnos/local-mcp.mjs`；`fnos/web/index.html` 的 `?v=`；`src/ui/app.mjs` 兜底文案；README 标题与飞牛 README。
+- 产物名：`Qingye-Toolbox-1.2.14-mac-arm64.dmg` / `-win-x64-setup.exe` / `-fnos-x86.fpk`。
 
 ## 5. 测试
 

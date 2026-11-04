@@ -1,6 +1,6 @@
 {
   "name": "qingye-pdf",
-  "version": "1.2.14.0",
+  "version": "1.2.14",
   "description": "轻页文件工具箱 · 本地转换与 AI 调用",
   "author": "Qingye contributors",
   "license": "AGPL-3.0-or-later",

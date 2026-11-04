@@ -1720,7 +1720,7 @@ try {
     ...api?.capabilities && typeof api.capabilities === "object" ? api.capabilities : {}
   };
   var can = (name) => Boolean(CAPABILITIES[name]);
-  var VERSION_FALLBACK = "1.2.14.0";
+  var VERSION_FALLBACK = "1.2.14";
   var HOST_LABEL = { fnos: "飞牛独立版", desktop: "桌面版" };
   var SOURCE_LABEL = { nas: "NAS", pc: "电脑上传", desktop: "本机" };
   var NAS = can("nas");

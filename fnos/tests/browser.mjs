@@ -110,7 +110,7 @@ try {
   for (const selector of ['#mcp-config', '#copy-json', '#copy-toml', '#add-root', '[data-install]', '[data-select]', '#cancel-download', '#download-status']) {
     assert.equal(await page.locator(selector).count(), 0, `${selector} 是桌面专属元素，飞牛端不应出现`);
   }
-  assert((await page.locator('#version-badge').textContent()).includes('1.2.14.0'), '版本角标应来自 /api/settings');
+  assert((await page.locator('#version-badge').textContent()).includes('1.2.14'), '版本角标应来自 /api/settings');
 
   for (const [group, operation] of [['office', 'office_to_pdf'], ['image', 'image_convert'], ['audio', 'audio_convert'], ['video', 'video_convert'], ['pdf', 'pdf_compress']]) {
     await page.locator(`[data-group=${group}]`).click();

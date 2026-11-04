@@ -14,7 +14,7 @@ import {hwStatus} from '../src/hwaccel.mjs';
 import {createLocalMcpServer} from './local-mcp.mjs';
 import {startWebEntry,resolveWebEntryOptions} from './web-entry.mjs';
 
-export const VERSION='1.2.14.0';
+export const VERSION='1.2.14';
 export const PREFIX='/app/qingye';
 export const CSP="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'";
 

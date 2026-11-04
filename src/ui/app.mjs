@@ -53,7 +53,7 @@ const CAPABILITIES = {
   ...(api?.capabilities && typeof api.capabilities === 'object' ? api.capabilities : {}),
 };
 const can = (name) => Boolean(CAPABILITIES[name]);
-const VERSION_FALLBACK = '1.2.14.0';
+const VERSION_FALLBACK = '1.2.14';
 const HOST_LABEL = { fnos: '飞牛独立版', desktop: '桌面版' };
 const SOURCE_LABEL = { nas: 'NAS', pc: '电脑上传', desktop: '本机' };
 
